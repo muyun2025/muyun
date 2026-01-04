@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MUYUN 會員系統</title>
+  
+  <!-- 1. 載入 Tailwind CSS (樣式) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 2. 設定模組對應 -->
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js",
+        "lucide-react": "https://esm.sh/lucide-react@0.294.0"
+      }
+    }
+  </script>
+
+  <!-- 3. 載入 Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body { background-color: #020617; color: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- 4. 主要程式碼區塊 -->
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { initializeApp } from 'firebase/app';
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, deleteDoc, onSnapshot, arrayUnion, writeBatch } from 'firebase/firestore';
+    import { 
+      User, Mail, Star, CreditCard, LogOut, Search, Plus, Trash2, Edit3, ChevronRight, 
+      ShieldCheck, LayoutDashboard, UserPlus, Image as ImageIcon, Camera, Download, Upload, Gift, 
+      History, TrendingUp, Phone, MapPin, Calendar, ShoppingBag, Tag, Package, ShoppingCart,
+      Settings, Save, X, Truck, CheckCircle, Zap, Cpu, AlertTriangle
+    } from 'lucide-react';
+
+    // --- ⚠️ 設定區域 ⚠️ ---
+    
+    // 1. 預設手動設定 (給 GitHub Pages 或下載後使用)
+    // 當您將檔案上傳到 GitHub 前，請手動填入這些欄位
+    let firebaseConfig = {
+      apiKey: "AIzaSyA1oYaOhVjIjR1TOmsJ_9LTIGvbuRxD_OI",
+
+  authDomain: "muyun-system.firebaseapp.com",
+
+  projectId: "muyun-system",
+
+  storageBucket: "muyun-system.firebasestorage.app",
+
+  messagingSenderId: "624450482056",
+
+  appId: "1:624450482056:web:3930e7d7c8392fb68c143d",
+
+  measurementId: "G-RNYN5YG02W"
+    };
+
+    let currentAppId = 'membership-system-tech';
+    let initialAuthToken = undefined;
+
+    // 2. 自動偵測環境變數 (給 Canvas 預覽環境使用)
+    if (typeof __firebase_config !== 'undefined') {
+      try {
+        firebaseConfig = JSON.parse(__firebase_config);
+        if (typeof __app_id !== 'undefined') currentAppId = __app_id;
+        if (typeof __initial_auth_token !== 'undefined') initialAuthToken = __initial_auth_token;
+      } catch (e) {
+        console.warn("使用手動設定模式");
+      }
+    }
+
+    // --- 初始化 Firebase ---
+    let app, auth, db;
+    let isConfigured = true;
+
+    try {
+      // 檢查是否仍為預設佔位文字
+      if (firebaseConfig.apiKey === "請填入_YOUR_API_KEY") {
+        console.error("請編輯 index.html 並填入正確的 firebaseConfig！");
+        isConfigured = false;
+      } else {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+      }
+    } catch (e) {
+      console.error("Firebase 初始化失敗:", e);
+      isConfigured = false;
+    }
+
+    // --- 預設資料 ---
+    const DEFAULT_PRODUCTS = [
+      { id: 'p1', name: '量子修復納豆激酶', price: 1800, desc: '奈米級吸收技術，啟動代謝循環', image: 'https://images.unsplash.com/photo-1615485925763-867862f80d29?auto=format&fit=crop&q=80&w=400' },
+      { id: 'p2', name: '光子嫩膚眼膠', price: 1200, desc: '生物光波傳導，重現明亮雙眸', image: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&q=80&w=400' }
+    ];
+
+    const DEFAULT_RULES = [
+      { points: 3000, rate: 0.7, label: "VVIP 黑卡 7折" },
+      { points: 1000, rate: 0.8, label: "VIP 金卡 8折" }
+    ];
+
+    const App = () => {
+      // User & View State
+      const [user, setUser] = useState(null);
+      const [isAdmin, setIsAdmin] = useState(false);
+      const [view, setView] = useState('login'); 
+      const [adminTab, setAdminTab] = useState('members');
+      const [loading, setLoading] = useState(true);
+
+      // Data State
+      const [memberData, setMemberData] = useState(null);
+      const [allMembers, setAllMembers] = useState([]);
+      const [products, setProducts] = useState([]);
+      const [discountRules, setDiscountRules] = useState([]);
+
+      // Form State
+      const [emailInput, setEmailInput] = useState('');
+      const [signupForm, setSignupForm] = useState({ name: '', email: '', phone: '', address: '', birthday: '', photo: '' });
+      
+      // Admin Forms
+      const [productForm, setProductForm] = useState({ id: '', name: '', price: '', desc: '', image: '' });
+      const [editingProduct, setEditingProduct] = useState(false);
+      const [tempRules, setTempRules] = useState([]); 
+      const [newMember, setNewMember] = useState({ name: '', email: '', phone: '', address: '', birthday: '', points: 0, level: '一般會員', photo: '' });
+
+      // Modals
+      const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+      const [showProductModal, setShowProductModal] = useState(false);
+      const [showPointModal, setShowPointModal] = useState(false);
+      const [showBuyModal, setShowBuyModal] = useState(false);
+      const [showOrderDetailModal, setShowOrderDetailModal] = useState(false);
+      
+      // Transaction State
+      const [pointForm, setPointForm] = useState({ memberId: '', memberName: '', amount: 10, reason: '' });
+      const [buyForm, setBuyForm] = useState({ product: null, quantity: 1 });
+      const [selectedOrder, setSelectedOrder] = useState(null);
+
+      // --- 1. Init & Auth ---
+      useEffect(() => {
+        if (!auth || !isConfigured) return; 
+        const initAuth = async () => {
+          try {
+            if (initialAuthToken) {
+              await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+              await signInAnonymously(auth);
+            }
+          } catch (error) { console.error("Auth failed:", error); }
+        };
+        initAuth();
+        return onAuthStateChanged(auth, (u) => { if (u) { setUser(u); setLoading(false); } });
+      }, []);
+
+      // --- 2. Data Listeners ---
+      useEffect(() => {
+        if (!user || !db) return;
+
+        const membersRef = collection(db, 'artifacts', currentAppId, 'public', 'data', 'members');
+        const unsubMembers = onSnapshot(membersRef, (snap) => {
+          const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setAllMembers(list);
+          if (memberData) {
+            const current = list.find(m => m.id === memberData.id);
+            if (current) setMemberData(current);
+          }
+        });
+
+        const productsRef = collection(db, 'artifacts', currentAppId, 'public', 'data', 'products');
+        const unsubProducts = onSnapshot(productsRef, (snap) => {
+          if (snap.empty) {
+            DEFAULT_PRODUCTS.forEach(p => setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', p.id), p));
+          } else {
+            setProducts(snap.docs.map(d => d.data()));
+          }
+        });
+
+        const settingsRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'settings', 'config');
+        const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setDiscountRules(docSnap.data().rules || []);
+          } else {
+            setDoc(settingsRef, { rules: DEFAULT_RULES });
+          }
+        });
+
+        return () => { unsubMembers(); unsubProducts(); unsubSettings(); };
+      }, [user, memberData?.id]);
+
+      // --- Helpers ---
+      const showToast = (msg, type='info') => {
+        const el = document.createElement('div');
+        el.className = `fixed top-4 left-1/2 -translate-x-1/2 ${type === 'error' ? 'bg-red-500/90' : 'bg-cyan-600/90'} text-white px-6 py-3 rounded-lg shadow-[0_0_15px_rgba(0,0,0,0.5)] z-[100] animate-bounce font-bold backdrop-blur-md border border-white/20`;
+        el.innerText = msg;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+      };
+
+      const getDiscountInfo = (points) => {
+        const sortedRules = [...discountRules].sort((a, b) => b.points - a.points);
+        const applicable = sortedRules.find(r => points >= r.points);
+        return applicable ? { rate: applicable.rate, label: applicable.label } : { rate: 1, label: "無折扣" };
+      };
+
+      // --- Import/Export ---
+      const exportToCSV = () => {
+        if (allMembers.length === 0) { showToast('無資料可匯出', 'error'); return; }
+        const headers = ['ID,姓名,Email,電話,生日,地址,點數,建立時間'];
+        const csvContent = allMembers.map(m => {
+          const created = m.createdAt ? new Date(m.createdAt).toLocaleDateString() : '';
+          return `${m.id},"${m.name}",${m.email},"${m.phone||''}",${m.birthday||''},"${m.address||''}",${m.points},${created}`;
+        }).join('\n');
+        
+        const blob = new Blob(['\uFEFF' + headers + '\n' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Members_Export_${new Date().toISOString().slice(0,10)}.csv`;
+        link.click();
+      };
+
+      const handleImportCSV = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const text = event.target.result;
+          const lines = text.split('\n').filter(l => l.trim() !== '');
+          const batch = writeBatch(db);
+          let count = 0;
+
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',').map(c => c.replace(/"/g, '').trim());
+            if (cols.length < 2) continue; 
+
+            const hasId = cols[0].startsWith('M'); 
+            const id = hasId ? cols[0] : `M${Date.now() + i}`;
+            
+            const memberData = {
+              id: id,
+              name: cols[1] || 'Unknown',
+              email: cols[2] || `user${id}@import.com`,
+              phone: cols[3] || '',
+              birthday: cols[4] || '',
+              address: cols[5] || '',
+              points: Number(cols[6]) || 0,
+              level: '一般會員',
+              history: [],
+              orders: [],
+              createdAt: new Date().toISOString(),
+              photo: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cols[1]}`
+            };
+
+            const ref = doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', id);
+            batch.set(ref, memberData, { merge: true });
+            count++;
+          }
+
+          await batch.commit();
+          showToast(`成功匯入 ${count} 筆資料`);
+        };
+        reader.readAsText(file);
+        e.target.value = ''; 
+      };
+
+      // --- Actions ---
+      const handleLogin = () => {
+        if (!emailInput) return;
+        if (emailInput === 'admin@system.com') { setIsAdmin(true); setView('admin'); return; }
+        const found = allMembers.find(m => m.email.toLowerCase() === emailInput.toLowerCase());
+        if (found) { setMemberData(found); setView('dashboard'); } 
+        else { showToast('查無此帳號，請先註冊', 'error'); }
+      };
+
+      const handleSignup = async () => {
+        if (!signupForm.name || !signupForm.email || !signupForm.phone) { showToast('請填寫完整資料', 'error'); return; }
+        if (allMembers.find(m => m.email === signupForm.email)) { showToast('Email 已存在', 'error'); return; }
+
+        const id = `M${Date.now().toString().slice(-6)}`;
+        const initialPoints = 200;
+        
+        const data = {
+          ...signupForm, id, level: '一般會員', points: initialPoints, 
+          history: [{ date: new Date().toISOString(), reason: '新會員入會禮', change: initialPoints }], 
+          orders: [], createdAt: new Date().toISOString(),
+          photo: signupForm.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${signupForm.name}`
+        };
+        await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', id), data);
+        setMemberData(data);
+        setView('dashboard');
+        showToast(`註冊成功！獲得 ${initialPoints} 點入會禮`);
+      };
+
+      // --- Admin Logic ---
+      const handleAdminAddMember = async () => {
+        if (!newMember.name || !newMember.email) { showToast('請填寫姓名與Email', 'error'); return; }
+        
+        const id = `M${Date.now().toString().slice(-6)}`;
+        const data = {
+          ...newMember,
+          id,
+          points: Number(newMember.points) || 0,
+          history: Number(newMember.points) > 0 ? [{ date: new Date().toISOString(), reason: '初始點數', change: Number(newMember.points) }] : [],
+          orders: [],
+          createdAt: new Date().toISOString(),
+          photo: newMember.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newMember.name}`
+        };
+        await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', id), data);
+        setShowAddMemberModal(false);
+        setNewMember({ name: '', email: '', phone: '', address: '', birthday: '', points: 0, level: '一般會員', photo: '' });
+        showToast('會員新增成功');
+      };
+
+      const handleSaveProduct = async () => {
+        if (!productForm.name || !productForm.price) return;
+        const id = editingProduct ? productForm.id : `p${Date.now()}`;
+        await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', id), { ...productForm, id, price: Number(productForm.price) });
+        setShowProductModal(false);
+        showToast('商品已儲存');
+      };
+
+      const handleDeleteProduct = async (id) => {
+        await deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', id));
+        showToast('商品已刪除');
+      };
+
+      const handleSaveRules = async () => {
+        await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'settings', 'config'), { rules: tempRules });
+        showToast('折扣規則已更新');
+      };
+
+      const handlePointAdjustment = async () => {
+        if (!pointForm.memberId) return;
+        const member = allMembers.find(m => m.id === pointForm.memberId);
+        const newPoints = (member.points || 0) + Number(pointForm.amount);
+        await updateDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', pointForm.memberId), {
+          points: newPoints,
+          history: arrayUnion({ date: new Date().toISOString(), reason: pointForm.reason, change: Number(pointForm.amount) })
+        });
+        setShowPointModal(false);
+        showToast('點數已更新');
+      };
+
+      const handleUpdateOrderStatus = async (memberId, orderId, newStatus) => {
+        try {
+          const member = allMembers.find(m => m.id === memberId);
+          if (!member) return;
+          const updatedOrders = member.orders.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o);
+          await updateDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', memberId), { orders: updatedOrders });
+          if (selectedOrder && selectedOrder.orderId === orderId) setSelectedOrder({ ...selectedOrder, status: newStatus });
+          showToast('訂單狀態已更新');
+        } catch (e) { console.error(e); showToast('更新失敗', 'error'); }
+      };
+
+      const handlePlaceOrder = async () => {
+        if (!buyForm.product || !memberData) return;
+        const { rate } = getDiscountInfo(memberData.points);
+        const unitPrice = buyForm.product.price;
+        const finalPrice = Math.round(unitPrice * rate);
+        const newOrder = {
+          orderId: `ORD-${Date.now().toString().slice(-6)}`,
+          date: new Date().toISOString(),
+          items: [{ name: buyForm.product.name, quantity: buyForm.quantity, unitPrice, discountRate: rate }],
+          totalAmount: finalPrice * buyForm.quantity,
+          status: 'pending',
+          shippingInfo: { name: memberData.name, phone: memberData.phone, address: memberData.address, email: memberData.email }
+        };
+        const memberRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', memberData.id);
+        await updateDoc(memberRef, { orders: arrayUnion(newOrder) });
+        showToast('訂單已送出！');
+        setShowBuyModal(false);
+        setView('dashboard');
+      };
+
+      // --- 錯誤畫面處理 (修正黑屏問題) ---
+      if (!isConfigured) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 space-y-6">
+            <div className="w-24 h-24 bg-red-900/30 rounded-full flex items-center justify-center border border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
+              <AlertTriangle size={48} className="text-red-500" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">系統尚未連結資料庫</h1>
+              <p className="text-slate-400 max-w-md mx-auto">
+                您目前正開啟 GitHub Pages 版本，但尚未填寫 Firebase 連線資訊。
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl max-w-lg text-left shadow-2xl">
+              <h3 className="text-cyan-400 font-bold mb-3 flex items-center gap-2">
+                <Cpu size={18}/> 如何修正？
+              </h3>
+              <ol className="list-decimal pl-5 space-y-2 text-sm text-slate-300">
+                <li>使用記事本或 VS Code 打開這個 <strong>index.html</strong> 檔案。</li>
+                <li>搜尋關鍵字 <code className="bg-slate-800 px-1 py-0.5 rounded text-yellow-400">firebaseConfig</code>。</li>
+                <li>將您的 Firebase 專案設定填入該區塊（取代 "請填入_YOUR_API_KEY" 等文字）。</li>
+                <li>儲存檔案並重新整理頁面。</li>
+              </ol>
+            </div>
+          </div>
+        );
+      }
+
+      if (loading) return <div className="flex justify-center items-center h-screen bg-slate-950 text-cyan-500"><div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan-500 border-t-transparent shadow-[0_0_20px_rgba(6,182,212,0.5)]"></div></div>;
+
+      return (
+        <div className="min-h-screen bg-slate-950 font-sans text-slate-200 selection:bg-cyan-500/30">
+          <nav className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 sticky top-0 z-20 flex justify-between items-center shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
+            <div className="flex items-center gap-2 font-bold text-xl text-cyan-400 cursor-pointer tracking-wider" onClick={() => setView('login')}>
+              <Cpu className="text-cyan-400" /> <span>MUYUN<span className="text-white">會員系統</span></span>
+            </div>
+            {view !== 'login' && view !== 'signup' && (
+              <div className="flex items-center gap-3">
+                {!isAdmin ? (
+                  <>
+                    <button onClick={() => setView('shop')} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300 ${view === 'shop' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                      <ShoppingBag size={18} /> <span className="hidden sm:inline">商城</span>
+                    </button>
+                    <button onClick={() => setView('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300 ${view === 'dashboard' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                      <LayoutDashboard size={18} /> <span className="hidden sm:inline">控制台</span>
+                    </button>
+                  </>
+                ) : (
+                  <span className="px-3 py-1 bg-purple-900/50 border border-purple-500/50 text-purple-300 text-xs rounded-full shadow-[0_0_10px_rgba(168,85,247,0.3)]">ADMIN ACCESS</span>
+                )}
+                <div className="w-px h-6 bg-slate-700 mx-2"></div>
+                <button onClick={() => { setView('login'); setIsAdmin(false); setMemberData(null); }} className="text-slate-500 hover:text-red-400 transition-colors">
+                  <LogOut size={18} />
+                </button>
+              </div>
+            )}
+          </nav>
+
+          <main className="max-w-6xl mx-auto p-4 md:p-8 relative">
+            <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+              <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-cyan-900/20 rounded-full blur-[120px]"></div>
+              <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-900/20 rounded-full blur-[120px]"></div>
+            </div>
+
+            {/* LOGIN */}
+            {view === 'login' && (
+              <div className="max-w-md mx-auto mt-20 bg-slate-900/50 backdrop-blur-xl border border-slate-700 rounded-3xl shadow-2xl overflow-hidden relative group">
+                <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 to-transparent pointer-events-none"></div>
+                <div className="p-8 text-center relative z-10">
+                  <div className="w-20 h-20 bg-cyan-950 rounded-full flex items-center justify-center mx-auto mb-6 border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)]">
+                    <Zap size={40} className="text-cyan-400" />
+                  </div>
+                  <h2 className="text-3xl font-bold text-white mb-2">歡迎登入系統</h2>
+                  <p className="text-slate-400">請輸入您的電子郵件以繼續</p>
+                </div>
+                <div className="p-8 pt-0 space-y-5 relative z-10">
+                  <input type="email" placeholder="Email Address" className="w-full p-4 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all outline-none" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
+                  <button onClick={handleLogin} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-4 rounded-xl font-bold shadow-[0_0_20px_rgba(8,145,178,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transition-all transform active:scale-[0.98]">
+                    連接系統
+                  </button>
+                  <div className="text-center pt-2">
+                    <button onClick={() => setView('signup')} className="text-cyan-400 text-sm hover:text-cyan-300 hover:underline">註冊新帳號</button>
+                  </div>
+                  <div className="absolute bottom-2 right-4 text-[10px] text-slate-700 font-mono">muyun</div>
+                </div>
+              </div>
+            )}
+
+            {/* SIGNUP */}
+            {view === 'signup' && (
+              <div className="max-w-lg mx-auto mt-10 bg-slate-900/50 backdrop-blur-xl border border-slate-700 rounded-3xl shadow-2xl overflow-hidden">
+                <div className="bg-slate-800/50 p-6 text-center border-b border-slate-700">
+                  <h2 className="text-2xl font-bold text-white">建立新帳戶</h2>
+                  <p className="text-cyan-400 text-sm mt-1">立即加入，即刻獲贈 200 點數</p>
+                </div>
+                <div className="p-8 space-y-4">
+                  <input type="text" placeholder="姓名 *" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={signupForm.name} onChange={e => setSignupForm({...signupForm, name: e.target.value})} />
+                  <input type="tel" placeholder="電話 *" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={signupForm.phone} onChange={e => setSignupForm({...signupForm, phone: e.target.value})} />
+                  <input type="email" placeholder="Email *" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={signupForm.email} onChange={e => setSignupForm({...signupForm, email: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <input type="date" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-slate-400 outline-none focus:border-cyan-500" value={signupForm.birthday} onChange={e => setSignupForm({...signupForm, birthday: e.target.value})} />
+                    <input type="text" placeholder="地址" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={signupForm.address} onChange={e => setSignupForm({...signupForm, address: e.target.value})} />
+                  </div>
+                  <button onClick={handleSignup} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-3 rounded-xl font-bold shadow-lg mt-4 transition-all">確認註冊</button>
+                  <div className="text-center"><button onClick={() => setView('login')} className="text-slate-500 text-sm hover:text-white">返回登入</button></div>
+                </div>
+              </div>
+            )}
+
+            {/* DASHBOARD */}
+            {view === 'dashboard' && memberData && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                <div className="bg-slate-900/60 backdrop-blur-md p-8 rounded-3xl border border-slate-700 flex flex-col md:flex-row gap-8 items-center relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                  <div className="relative">
+                    <div className="w-28 h-28 rounded-full p-[2px] bg-gradient-to-tr from-cyan-400 to-purple-600">
+                      <img src={memberData.photo} className="w-full h-full rounded-full object-cover bg-slate-950" />
+                    </div>
+                    <div className="absolute bottom-0 right-0 bg-slate-900 rounded-full p-1 border border-slate-700">
+                      <div className="bg-green-500 w-4 h-4 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.6)]"></div>
+                    </div>
+                  </div>
+                  <div className="text-center md:text-left flex-1 relative z-10">
+                    <h2 className="text-4xl font-bold text-white mb-2">{memberData.name}</h2>
+                    <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-2">
+                      <span className="px-4 py-1 bg-slate-800 text-slate-300 rounded-full text-sm border border-slate-600">{memberData.level}</span>
+                      <span className="px-4 py-1 bg-cyan-950/50 text-cyan-400 rounded-full text-sm border border-cyan-500/30 flex items-center gap-2 shadow-[0_0_10px_rgba(34,211,238,0.1)]">
+                        <Tag size={14} /> {getDiscountInfo(memberData.points).label}
+                      </span>
+                    </div>
+                    <div className="mt-4 text-slate-400 text-sm font-mono flex gap-4 justify-center md:justify-start">
+                      <span>ID: {memberData.id}</span>
+                      <span className="text-slate-600">|</span>
+                      <span>{memberData.email}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-gradient-to-br from-cyan-900 to-slate-900 p-8 rounded-3xl text-white shadow-lg relative overflow-hidden border border-cyan-500/20 group">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
+                    <div className="relative z-10">
+                      <div className="flex justify-between mb-8">
+                        <CreditCard size={32} className="text-cyan-400" /> 
+                        <span className="font-mono text-cyan-300/50 tracking-[0.2em]">POINTS BALANCE</span>
+                      </div>
+                      <h3 className="text-6xl font-black my-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-cyan-200">{memberData.points}</h3>
+                      <div className="w-full bg-slate-950/50 h-1 mt-6 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-500 shadow-[0_0_10px_rgba(34,211,238,0.8)]" style={{width: `${Math.min((memberData.points/1000)*100, 100)}%`}}></div>
+                      </div>
+                      <p className="text-xs text-cyan-200/60 mt-2 font-mono text-right">Target: 1000 pts</p>
+                    </div>
+                    <div className="absolute -right-20 -bottom-20 bg-cyan-500/20 w-60 h-60 rounded-full blur-[80px] group-hover:bg-cyan-500/30 transition-all duration-500"></div>
+                  </div>
+
+                  <div className="bg-slate-900/60 backdrop-blur-md p-6 rounded-3xl border border-slate-700 overflow-y-auto max-h-[300px]">
+                    <h4 className="font-bold flex items-center gap-2 mb-4 text-white"><Package className="text-purple-400" /> 近期訂單</h4>
+                    {memberData.orders?.length > 0 ? (
+                      [...memberData.orders].reverse().map((order, i) => (
+                        <div key={i} className="p-4 mb-3 bg-slate-950/50 rounded-xl border border-slate-800 flex justify-between items-center text-sm hover:border-slate-600 transition-colors">
+                          <div>
+                            <div className="font-bold text-slate-200">{new Date(order.date).toLocaleDateString()}</div>
+                            <div className="text-slate-500 text-xs mt-1">{order.items[0].name} 等 {order.items.length} 項</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-cyan-400 text-lg">${order.totalAmount}</div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded uppercase tracking-wider ${order.status === 'shipped' ? 'text-green-400 bg-green-900/30' : 'text-yellow-400 bg-yellow-900/30'}`}>
+                              {order.status === 'shipped' ? 'Shipped' : 'Pending'}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    ) : <div className="text-center text-slate-600 py-10 font-mono">NO ORDERS FOUND</div>}
+                  </div>
+                </div>
+                
+                <div className="bg-slate-900/60 backdrop-blur-md p-6 rounded-3xl border border-slate-700">
+                  <h4 className="font-bold flex items-center gap-2 mb-4 text-white"><History className="text-cyan-400" /> 點數紀錄</h4>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+                    {[...(memberData.history || [])].reverse().map((h, i) => (
+                      <div key={i} className="flex justify-between p-3 bg-slate-800/30 rounded-lg text-sm border border-transparent hover:border-slate-700 transition-all">
+                        <span className="text-slate-300">{h.reason} <span className="text-slate-600 text-xs ml-2 font-mono">{new Date(h.date).toLocaleDateString()}</span></span>
+                        <span className={`font-mono font-bold ${h.change > 0 ? 'text-green-400' : 'text-red-400'}`}>{h.change > 0 ? '+' : ''}{h.change}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SHOP */}
+            {view === 'shop' && (
+              <div className="animate-in fade-in slide-in-from-right-4">
+                <div className="bg-gradient-to-r from-purple-900 to-slate-900 rounded-3xl p-8 text-white mb-8 shadow-2xl border border-purple-500/20 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 rounded-full blur-[80px]"></div>
+                  <h2 className="text-3xl font-bold relative z-10">未來商城</h2>
+                  <p className="opacity-80 mt-2 font-mono text-purple-200 relative z-10">
+                    BALANCE: <span className="font-bold text-xl text-white">{memberData.points}</span> PTS
+                    <span className="bg-purple-500/20 border border-purple-500/50 px-2 py-0.5 ml-3 rounded text-xs text-purple-300">
+                      {getDiscountInfo(memberData.points).label}
+                    </span>
+                  </p>
+                </div>
+                <div className="grid md:grid-cols-2 gap-8">
+                  {products.map(p => {
+                    const { rate } = getDiscountInfo(memberData.points);
+                    const price = Math.round(p.price * rate);
+                    return (
+                      <div key={p.id} className="bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden hover:border-cyan-500/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all group">
+                        <div className="h-56 overflow-hidden relative">
+                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
+                          {rate < 1 && <div className="absolute top-4 right-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">SALE</div>}
+                        </div>
+                        <div className="p-6 relative">
+                          <h3 className="text-xl font-bold text-white mb-1">{p.name}</h3>
+                          <p className="text-slate-400 text-sm mb-4 line-clamp-2">{p.desc}</p>
+                          <div className="flex justify-between items-end mb-6">
+                            <div>
+                              {rate < 1 && <span className="text-slate-600 line-through text-xs mr-2">${p.price}</span>}
+                              <span className="text-3xl font-bold text-cyan-400">${price}</span>
+                            </div>
+                          </div>
+                          <button onClick={() => { setBuyForm({ product: p, quantity: 1 }); setShowBuyModal(true); }} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold flex justify-center gap-2 hover:bg-cyan-600 transition-colors border border-slate-700 hover:border-cyan-500">
+                            <ShoppingCart size={18} /> 加入訂單
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ADMIN */}
+            {view === 'admin' && (
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                  <h2 className="text-2xl font-bold flex items-center gap-2 text-white"><ShieldCheck className="text-purple-400" /> 系統管理中樞</h2>
+                  <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-700">
+                    {['members', 'products', 'orders', 'settings'].map(tab => (
+                      <button key={tab} onClick={() => setAdminTab(tab)} className={`px-5 py-2 rounded-lg text-sm font-bold capitalize transition-all ${adminTab === tab ? 'bg-slate-800 text-cyan-400 shadow-md' : 'text-slate-500 hover:text-slate-300'}`}>
+                        {tab === 'members' && '會員'}
+                        {tab === 'products' && '商品'}
+                        {tab === 'orders' && '訂單'}
+                        {tab === 'settings' && '設定'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Admin: Members */}
+                {adminTab === 'members' && (
+                  <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
+                    <div className="p-4 border-b border-slate-700 flex flex-wrap justify-between items-center bg-slate-800/50 gap-2">
+                      <span className="font-bold text-slate-200">會員資料庫 ({allMembers.length})</span>
+                      <div className="flex gap-2">
+                        <label className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 cursor-pointer transition-colors border border-slate-600">
+                          <Upload size={16} /> 匯入
+                          <input type="file" accept=".csv" onChange={handleImportCSV} hidden />
+                        </label>
+                        <button onClick={exportToCSV} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 transition-colors border border-slate-600">
+                          <Download size={16} /> 匯出
+                        </button>
+                        <button onClick={() => { setNewMember({ name: '', email: '', phone: '', address: '', birthday: '', points: 0, level: '一般會員', photo: '' }); setShowAddMemberModal(true); }} className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 shadow-[0_0_10px_rgba(8,145,178,0.4)]">
+                          <Plus size={16} /> 新增
+                        </button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm text-slate-300">
+                        <thead className="text-slate-500 border-b border-slate-700 bg-slate-900/50"><tr><th className="p-4">會員資訊</th><th className="p-4">點數餘額</th><th className="p-4 text-right">操作</th></tr></thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {allMembers.map(m => (
+                            <tr key={m.id} className="hover:bg-slate-800/50 transition-colors">
+                              <td className="p-4">
+                                <div className="font-bold text-white">{m.name}</div>
+                                <div className="text-xs text-slate-500 font-mono">{m.email}</div>
+                              </td>
+                              <td className="p-4 font-mono text-cyan-400">{m.points}</td>
+                              <td className="p-4 text-right">
+                                <button onClick={() => { setPointForm({ memberId: m.id, memberName: m.name, amount: 10, reason: '' }); setShowPointModal(true); }} className="text-slate-900 bg-cyan-400 px-3 py-1 rounded text-xs font-bold mr-2 hover:bg-cyan-300 transition-colors">增減點數</button>
+                                <button onClick={() => deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', m.id))} className="text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin: Products */}
+                {adminTab === 'products' && (
+                  <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
+                    <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+                      <span className="font-bold text-slate-200">商品清單</span>
+                      <button onClick={() => { setProductForm({ id: '', name: '', price: '', desc: '', image: '' }); setEditingProduct(false); setShowProductModal(true); }} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1"><Plus size={16} /> 上架</button>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4 p-4">
+                      {products.map(p => (
+                        <div key={p.id} className="flex gap-4 border border-slate-700 bg-slate-800/30 p-3 rounded-xl items-center">
+                          <img src={p.image} className="w-16 h-16 rounded-lg object-cover bg-slate-800" />
+                          <div className="flex-1">
+                            <div className="font-bold text-white">{p.name}</div>
+                            <div className="text-sm text-cyan-400">${p.price}</div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setProductForm(p); setEditingProduct(true); setShowProductModal(true); }} className="p-2 text-slate-400 hover:text-cyan-400 bg-slate-800 rounded-lg"><Edit3 size={16} /></button>
+                            <button onClick={() => handleDeleteProduct(p.id)} className="p-2 text-slate-400 hover:text-red-400 bg-slate-800 rounded-lg"><Trash2 size={16} /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin: Orders */}
+                {adminTab === 'orders' && (
+                  <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
+                    <div className="p-4 border-b border-slate-700 bg-slate-800/50 font-bold text-slate-200">訂單監控</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm text-slate-300">
+                        <thead className="text-slate-500 border-b border-slate-700 bg-slate-900"><tr><th className="p-4">訂單編號</th><th className="p-4">訂購人</th><th className="p-4">金額</th><th className="p-4">狀態</th><th className="p-4 text-right">操作</th></tr></thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {allMembers.flatMap(m => (m.orders || []).map(o => ({ ...o, memberId: m.id, memberName: m.name })))
+                            .sort((a, b) => new Date(b.date) - new Date(a.date))
+                            .map(order => (
+                              <tr key={order.orderId} className="hover:bg-slate-800/50">
+                                <td className="p-4 font-mono text-xs text-cyan-300">{order.orderId}<div className="text-slate-500">{new Date(order.date).toLocaleDateString()}</div></td>
+                                <td className="p-4">{order.shippingInfo?.name || order.memberName}</td>
+                                <td className="p-4 font-bold text-white">${order.totalAmount}</td>
+                                <td className="p-4">
+                                  <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-wider ${order.status === 'shipped' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'}`}>
+                                    {order.status === 'shipped' ? 'Shipped' : 'Pending'}
+                                  </span>
+                                </td>
+                                <td className="p-4 text-right">
+                                  <button onClick={() => { setSelectedOrder({ ...order, memberId: order.memberId }); setShowOrderDetailModal(true); }} className="text-slate-400 hover:text-white text-xs border border-slate-600 px-3 py-1 rounded hover:bg-slate-700 transition-colors">View</button>
+                                </td>
+                              </tr>
+                            ))
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin: Settings */}
+                {adminTab === 'settings' && (
+                  <div className="bg-slate-900 rounded-2xl border border-slate-700 p-8">
+                    <h3 className="font-bold text-lg text-white mb-6 flex items-center gap-2"><Settings className="text-cyan-400" /> 全域折扣規則</h3>
+                    <div className="space-y-4 mb-6">
+                      {(tempRules.length === 0 ? discountRules : tempRules).map((rule, idx) => (
+                        <div key={idx} className="flex gap-2 items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700">
+                          <input type="number" className="p-2 bg-slate-900 border border-slate-600 rounded text-white w-24 text-center focus:border-cyan-500 outline-none" 
+                                  value={rule.points} 
+                                  onChange={e => {
+                                    const newRules = [...(tempRules.length ? tempRules : discountRules)];
+                                    newRules[idx] = { ...newRules[idx], points: Number(e.target.value) };
+                                    setTempRules(newRules);
+                                  }} />
+                          <span className="text-slate-500 text-sm">點以上</span>
+                          <input type="number" step="0.1" className="p-2 bg-slate-900 border border-slate-600 rounded text-white w-20 text-center focus:border-cyan-500 outline-none"
+                                  value={rule.rate} 
+                                  onChange={e => {
+                                    const newRules = [...(tempRules.length ? tempRules : discountRules)];
+                                    newRules[idx] = { ...newRules[idx], rate: Number(e.target.value) };
+                                    setTempRules(newRules);
+                                  }} />
+                          <input type="text" className="p-2 bg-slate-900 border border-slate-600 rounded text-white flex-1 focus:border-cyan-500 outline-none"
+                                  value={rule.label} 
+                                  onChange={e => {
+                                    const newRules = [...(tempRules.length ? tempRules : discountRules)];
+                                    newRules[idx] = { ...newRules[idx], label: e.target.value };
+                                    setTempRules(newRules);
+                                  }} />
+                          <button onClick={() => {
+                              const newRules = (tempRules.length ? tempRules : discountRules).filter((_, i) => i !== idx);
+                              setTempRules(newRules);
+                          }} className="text-slate-500 hover:text-red-400 p-2"><X size={18} /></button>
+                        </div>
+                      ))}
+                      <button onClick={() => setTempRules([...(tempRules.length ? tempRules : discountRules), { points: 0, rate: 0.9, label: '新規則' }])} className="text-cyan-400 text-sm flex items-center gap-1 hover:text-cyan-300 mt-2">
+                        <Plus size={16} /> 新增規則條件
+                      </button>
+                    </div>
+                    <button onClick={handleSaveRules} className="bg-cyan-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-cyan-500 shadow-lg shadow-cyan-500/20">
+                      <Save size={18} /> 儲存設定
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* --- MODALS (Dark Themed) --- */}
+
+          {/* Admin Add Member Modal */}
+          {showAddMemberModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+                <h3 className="font-bold text-xl text-white mb-4">手動新增會員</h3>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="text" placeholder="姓名" className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} />
+                    <input type="text" placeholder="電話" className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} />
+                  </div>
+                  <input type="email" placeholder="Email" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="date" className="p-3 bg-slate-950 border border-slate-700 rounded text-slate-400 outline-none focus:border-cyan-500" value={newMember.birthday} onChange={e => setNewMember({...newMember, birthday: e.target.value})} />
+                    <input type="text" placeholder="地址" className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.address} onChange={e => setNewMember({...newMember, address: e.target.value})} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="number" placeholder="初始點數" className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.points} onChange={e => setNewMember({...newMember, points: e.target.value})} />
+                    <select className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.level} onChange={e => setNewMember({...newMember, level: e.target.value})}>
+                      <option>一般會員</option>
+                      <option>黃金會員</option>
+                      <option>白金會員</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-6">
+                  <button onClick={() => setShowAddMemberModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-2 rounded hover:bg-slate-800">取消</button>
+                  <button onClick={handleAdminAddMember} className="flex-1 bg-cyan-600 text-white p-2 rounded font-bold hover:bg-cyan-500">確認新增</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Product Modal */}
+          {showProductModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                <h3 className="font-bold text-xl text-white mb-4">{editingProduct ? '編輯商品' : '新增商品'}</h3>
+                <div className="space-y-3">
+                  <input type="text" placeholder="商品名稱" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
+                  <input type="number" placeholder="價格" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} />
+                  <input type="text" placeholder="描述" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={productForm.desc} onChange={e => setProductForm({...productForm, desc: e.target.value})} />
+                  <input type="text" placeholder="圖片網址" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={productForm.image} onChange={e => setProductForm({...productForm, image: e.target.value})} />
+                </div>
+                <div className="flex gap-2 mt-6">
+                  <button onClick={() => setShowProductModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-2 rounded hover:bg-slate-800">取消</button>
+                  <button onClick={handleSaveProduct} className="flex-1 bg-cyan-600 text-white p-2 rounded font-bold hover:bg-cyan-500">儲存</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Point Modal */}
+          {showPointModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl"></div>
+                <h3 className="font-bold text-xl text-white mb-1">點數調整</h3>
+                <p className="text-slate-500 text-sm mb-6">對象: {pointForm.memberName}</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">變動理由</label>
+                    <input type="text" placeholder="例如: 購買回饋, 生日禮金" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={pointForm.reason} onChange={e => setPointForm({...pointForm, reason: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">點數增減 (負數為扣除)</label>
+                    <input type="number" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-cyan-400 font-mono text-xl outline-none focus:border-cyan-500" value={pointForm.amount} onChange={e => setPointForm({...pointForm, amount: e.target.value})} />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-6">
+                  <button onClick={() => setShowPointModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-3 rounded-xl hover:bg-slate-800">取消</button>
+                  <button onClick={handlePointAdjustment} className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 text-white p-3 rounded-xl font-bold hover:shadow-lg hover:shadow-cyan-500/30">確認調整</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Buy Modal */}
+          {showBuyModal && buyForm.product && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                <h3 className="font-bold text-xl text-white mb-6 text-center">確認訂購</h3>
+                <div className="flex gap-4 mb-6 items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700">
+                  <img src={buyForm.product.image} className="w-16 h-16 rounded object-cover" />
+                  <div>
+                    <div className="font-bold text-white">{buyForm.product.name}</div>
+                    <div className="text-sm text-slate-400">${buyForm.product.price} / 單位</div>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between items-center mb-6 px-2">
+                    <span className="text-slate-400">數量</span>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setBuyForm({...buyForm, quantity: Math.max(1, buyForm.quantity - 1)})} className="w-8 h-8 rounded-full border border-slate-600 text-slate-300 hover:bg-slate-700">-</button>
+                      <span className="font-bold text-white w-6 text-center">{buyForm.quantity}</span>
+                      <button onClick={() => setBuyForm({...buyForm, quantity: buyForm.quantity + 1})} className="w-8 h-8 rounded-full border border-slate-600 text-slate-300 hover:bg-slate-700">+</button>
+                    </div>
+                </div>
+
+                <div className="border-t border-slate-700 pt-4">
+                  <div className="flex justify-between text-sm mb-1 text-slate-400">
+                    <span>折扣 ({getDiscountInfo(memberData.points).label})</span>
+                    <span className="text-green-400 font-bold">{Math.round((1 - getDiscountInfo(memberData.points).rate) * 100)}% OFF</span>
+                  </div>
+                  <div className="flex justify-between items-end mt-2">
+                    <span className="font-bold text-white">總金額</span>
+                    <span className="text-3xl font-black text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">
+                      ${Math.round(buyForm.product.price * getDiscountInfo(memberData.points).rate) * buyForm.quantity}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="mt-6 bg-yellow-900/20 border border-yellow-700/30 p-3 rounded text-xs text-yellow-200/70">
+                  <span className="font-bold text-yellow-500">配送至:</span> {memberData.address} <br/> ({memberData.name} / {memberData.phone})
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button onClick={() => setShowBuyModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-3 rounded-xl hover:bg-slate-800 font-bold">取消</button>
+                  <button onClick={handlePlaceOrder} className="flex-1 bg-cyan-600 text-white p-3 rounded-xl font-bold hover:bg-cyan-500 shadow-lg shadow-cyan-500/20">確認送出</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Admin Order Detail Modal */}
+          {showOrderDetailModal && selectedOrder && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-8 shadow-2xl relative">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h3 className="text-xl font-bold flex items-center gap-2 text-white"><Package className="text-purple-400" /> 訂單詳情</h3>
+                    <span className="text-sm text-slate-500 font-mono">{selectedOrder.orderId}</span>
+                  </div>
+                  <button onClick={() => setShowOrderDetailModal(false)} className="text-slate-500 hover:text-white"><X /></button>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 p-4 rounded-xl mb-6 space-y-2 text-sm text-slate-300">
+                  <div className="font-bold text-slate-200 border-b border-slate-700 pb-2 mb-2">收件人資料</div>
+                  <div className="grid grid-cols-[60px_1fr] gap-2">
+                    <span className="text-slate-500">姓名:</span> <span className="text-white">{selectedOrder.shippingInfo?.name || selectedOrder.memberName}</span>
+                    <span className="text-slate-500">電話:</span> <span className="text-white">{selectedOrder.shippingInfo?.phone}</span>
+                    <span className="text-slate-500">地址:</span> <span className="text-white">{selectedOrder.shippingInfo?.address}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 mb-8">
+                  {selectedOrder.items.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-slate-300">
+                      <div>
+                        <div className="font-bold text-white">{item.name}</div>
+                        <div className="text-xs text-slate-500">${item.unitPrice} x {item.quantity} (Rate: {item.discountRate})</div>
+                      </div>
+                      <div className="font-bold text-white">${Math.round(item.unitPrice * item.discountRate * item.quantity)}</div>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center text-lg font-black pt-2">
+                    <span className="text-white">Total</span>
+                    <span className="text-cyan-400 text-2xl">${selectedOrder.totalAmount}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  {selectedOrder.status !== 'shipped' ? (
+                    <button 
+                      onClick={() => { handleUpdateOrderStatus(selectedOrder.memberId, selectedOrder.orderId, 'shipped'); setShowOrderDetailModal(false); }}
+                      className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(34,197,94,0.3)]"
+                    >
+                      <Truck size={18} /> 標記為已出貨
+                    </button>
+                  ) : (
+                    <div className="flex-1 bg-slate-800 border border-slate-700 text-slate-500 py-3 rounded-xl font-bold flex justify-center items-center gap-2 cursor-not-allowed">
+                      <CheckCircle size={18} /> 訂單已完成
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
