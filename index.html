@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MUYUN 會員系統 | 2026 丙午限定版</title>
+  <title>MUYUN 會員系統 | muyun2026</title>
   
   <!-- 1. 載入 Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -34,14 +34,14 @@
     ::-webkit-scrollbar-thumb { background: #451a1a; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #7f1d1d; }
     
-    /* 極光背景動畫 - 改為火紅與金黃色系 */
+    /* 極光背景動畫 */
     .orb { position: fixed; border-radius: 50%; filter: blur(100px); z-index: -1; pointer-events: none; animation: float 15s infinite ease-in-out; }
-    .orb-1 { top: -10%; left: -10%; width: 60vw; height: 60vw; background: rgba(220, 38, 38, 0.15); /* Red-600 */ } 
-    .orb-2 { bottom: -10%; right: -10%; width: 60vw; height: 60vw; background: rgba(245, 158, 11, 0.12); /* Amber-500 */ animation-delay: -5s; }
+    .orb-1 { top: -10%; left: -10%; width: 60vw; height: 60vw; background: rgba(220, 38, 38, 0.15); } 
+    .orb-2 { bottom: -10%; right: -10%; width: 60vw; height: 60vw; background: rgba(245, 158, 11, 0.12); animation-delay: -5s; }
     
     @keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(20px, 20px); } }
     
-    /* UI 特效 - 赤焰光暈 */
+    /* UI 特效 */
     .tech-input:focus { box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); border-color: #ef4444; }
     .glass-card { background: rgba(20, 5, 5, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(127, 29, 29, 0.3); }
     
@@ -58,18 +58,17 @@
     import React, { useState, useEffect, useRef } from 'react';
     import { createRoot } from 'react-dom/client';
     import { initializeApp } from 'firebase/app';
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken, signInAnonymously } from 'firebase/auth';
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
     import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, deleteDoc, onSnapshot, arrayUnion, writeBatch } from 'firebase/firestore';
     import { 
       User, Mail, Star, CreditCard, LogOut, Search, Plus, Trash2, Edit3, ChevronRight, 
       ShieldCheck, LayoutDashboard, UserPlus, Image as ImageIcon, Camera, Download, Upload, Gift, 
       History, TrendingUp, Phone, MapPin, Calendar, ShoppingBag, Tag, Package, ShoppingCart,
       Settings, Save, X, Truck, CheckCircle, Zap, Cpu, AlertTriangle, Bell, Megaphone, Info,
-      MessageCircle, Send, MessageSquare, ExternalLink, Lock, Minus, ArrowRight, Flame, HelpCircle
+      MessageCircle, Send, MessageSquare, ExternalLink, Lock, Minus, ArrowRight, Flame, HelpCircle, FileJson, FileSpreadsheet
     } from 'lucide-react';
 
-    // --- ⚠️ 設定區域 ⚠️ ---
-    // 請將您的 Firebase 設定填入此處
+    // --- ⚠️ 請在此填入 Firebase 設定 ⚠️ ---
     let firebaseConfig = {
       apiKey: "AIzaSyA1oYaOhVjIjR1TOmsJ_9LTIGvbuRxD_OI",
 
@@ -90,7 +89,7 @@
     let currentAppId = 'membership-system-tech';
     let initialAuthToken = undefined;
 
-    // 自動偵測環境變數 (Canvas 預覽用)
+    // 自動偵測環境變數
     if (typeof __firebase_config !== 'undefined') {
       try {
         firebaseConfig = JSON.parse(__firebase_config);
@@ -103,7 +102,7 @@
     let isConfigured = true;
 
     try {
-      if (firebaseConfig.apiKey === "請填入_YOUR_API_KEY") {
+      if (firebaseConfig.apiKey.includes("請填入")) {
         console.error("設定未填寫");
         isConfigured = false;
       } else {
@@ -122,6 +121,9 @@
       { points: 3000, rate: 0.7, label: "VVIP 黑卡 7折" },
       { points: 1000, rate: 0.8, label: "VIP 金卡 8折" }
     ];
+
+    // 使用 Unsplash 的雲朵照片作為 Logo
+    const CLOUD_LOGO_URL = "https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&q=80&w=200&h=200";
 
     const App = () => {
       // User State
@@ -170,16 +172,15 @@
       const [showPaymentModal, setShowPaymentModal] = useState(false);
       const [selectedOrder, setSelectedOrder] = useState(null);
       
-      // Error Handling Modal
       const [showAuthErrorModal, setShowAuthErrorModal] = useState(false);
 
       // --- Initialization ---
       useEffect(() => {
         if (!auth || !isConfigured) return; 
-        const initAuth = async () => {
-          if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
-        };
-        initAuth();
+
+        // 初始化時強制登出
+        signOut(auth).catch((e) => console.error(e));
+
         return onAuthStateChanged(auth, (u) => {
           if (u) {
             setUser(u);
@@ -289,7 +290,6 @@
         if (!loginForm.email || !loginForm.password) { showToast('請輸入帳號密碼', 'error'); return; }
         try { await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password); showToast('登入成功'); } 
         catch (e) { 
-          console.log("Login Error Code:", e.code); 
           if(e.code === 'auth/operation-not-allowed') {
             setShowAuthErrorModal(true);
           } else {
@@ -310,7 +310,6 @@
           await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', uid), data);
           showToast(`註冊成功！`);
         } catch (e) { 
-          console.log("Signup Error Code:", e.code);
           if(e.code === 'auth/operation-not-allowed') {
              setShowAuthErrorModal(true);
           } else if(e.code === 'auth/email-already-in-use') {
@@ -327,7 +326,7 @@
           if (exist) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
           return [...prev, { ...product, quantity: 1 }];
         });
-        setShowCart(true);
+        setShowCart(true); // 自動打開購物車
       };
       const updateCartQty = (id, delta) => setCart(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i));
       const removeFromCart = (id) => setCart(prev => prev.filter(i => i.id !== id));
@@ -417,6 +416,67 @@
         setShowPointModal(false); showToast('點數更新');
       };
 
+      // --- Import / Export Logic (Modified to JSON) ---
+      const exportData = () => {
+        if (allMembers.length === 0) { showToast('無資料可匯出', 'error'); return; }
+        const jsonString = JSON.stringify(allMembers, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `MUYUN_Backup_${new Date().toISOString().slice(0,10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        showToast('已匯出完整資料備份 (JSON)');
+      };
+
+      const exportReport = () => {
+         if (allMembers.length === 0) { showToast('無資料可匯出', 'error'); return; }
+         const headers = ['ID,姓名,電話,Email,點數,等級,訂單數,總消費'];
+         const csv = allMembers.map(m => {
+           const orderCount = m.orders ? m.orders.length : 0;
+           const totalSpent = m.orders ? m.orders.reduce((acc, curr) => acc + curr.totalAmount, 0) : 0;
+           return `${m.id},"${m.name}","${m.phone||''}",${m.email},${m.points},${m.level},${orderCount},${totalSpent}`;
+         }).join('\n');
+         const blob = new Blob(['\uFEFF'+headers+'\n'+csv], {type:'text/csv'});
+         const url = URL.createObjectURL(blob);
+         const link = document.createElement('a');
+         link.href = url;
+         link.download = `MUYUN_Report_${new Date().toISOString().slice(0,10)}.csv`;
+         link.click();
+         URL.revokeObjectURL(url);
+         showToast('已下載營運報表 (CSV)');
+      };
+
+      const handleImportData = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          try {
+            const importedData = JSON.parse(event.target.result);
+            if (!Array.isArray(importedData)) throw new Error('格式錯誤');
+            
+            const batch = writeBatch(db);
+            let count = 0;
+            importedData.forEach(member => {
+              if (member.id) {
+                 const ref = doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', member.id);
+                 batch.set(ref, member, { merge: true });
+                 count++;
+              }
+            });
+            await batch.commit();
+            showToast(`成功還原 ${count} 筆會員資料 (含訂單記錄)`);
+          } catch (err) {
+            console.error(err);
+            showToast('還原失敗：檔案格式不正確 (請使用 .json 備份檔)', 'error');
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = ''; 
+      };
+
       if (!isConfigured) return <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 space-y-6 text-white"><AlertTriangle size={48} className="text-red-500" /><h1>請設定 index.html 中的 Firebase Config</h1></div>;
       if (loading) return <div className="flex justify-center items-center h-screen bg-[#0F0505] text-red-500"><div className="animate-spin rounded-full h-12 w-12 border-4 border-red-500 border-t-transparent shadow-[0_0_20px_rgba(239,68,68,0.5)]"></div></div>;
 
@@ -424,11 +484,11 @@
         <div className="min-h-screen bg-[#0F0505] font-sans text-slate-200 selection:bg-red-500/30 pb-20 relative">
           <div className="orb orb-1"></div><div className="orb orb-2"></div>
           
-          {/* Navbar - Hidden on Login/Signup */}
+          {/* Navbar */}
           {user && (
             <nav className="bg-[#1a0b0b]/80 backdrop-blur-md border-b border-red-900/30 px-6 py-4 sticky top-0 z-20 flex justify-between items-center shadow-lg">
               <div className="flex items-center gap-2 font-bold text-xl text-red-500 cursor-pointer tracking-wider" onClick={() => !user && setView('login')}>
-                <Flame className="text-red-500 fill-red-500" /> <span>MUYUN<span className="text-white">會員系統</span></span>
+                <img src={CLOUD_LOGO_URL} alt="Logo" className="w-8 h-8 rounded-full object-cover" /> <span>MUYUN<span className="text-white">會員系統</span></span>
               </div>
               <div className="flex items-center gap-3">
                 {!isAdmin ? (
@@ -454,11 +514,11 @@
                 <div className="w-full max-w-md p-8 glass-card rounded-3xl shadow-2xl relative overflow-hidden group">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-50"></div>
                   <div className="text-center mb-8 relative z-10">
-                    <div className="w-20 h-20 bg-[#1a0b0b] rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
-                      <Flame size={40} className="text-red-500 fill-red-500/20" />
+                    <div className="w-24 h-24 bg-[#1a0b0b] rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30 shadow-[0_0_30px_rgba(239,68,68,0.2)] overflow-hidden">
+                       <img src={CLOUD_LOGO_URL} alt="Logo" className="w-full h-full object-cover" />
                     </div>
                     <h2 className="text-3xl font-bold text-white tracking-wide mb-2">會員登入</h2>
-                    <p className="text-slate-400 text-sm">2026 丙午火馬年限定版</p>
+                    <p className="text-slate-400 text-sm">muyun2026</p>
                   </div>
                   <form className="space-y-5 relative z-10" onSubmit={handleLogin}>
                     <div className="relative group/input"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-red-400" size={20}/><input type="email" placeholder="電子郵件" className="tech-input w-full p-4 pl-12 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-white outline-none transition-all duration-300" value={loginForm.email} onChange={e => setLoginForm({...loginForm, email: e.target.value})} /></div>
@@ -587,7 +647,18 @@
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => { setNewMember({name:'',email:'',phone:'',address:'',birthday:'',points:0,level:'一般會員',photo:''}); setShowAddMemberModal(true); }} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1"><Plus size={16} /> 新增</button>
+                        {/* New Import/Export Buttons */}
+                        <label className="bg-red-900/30 hover:bg-red-900/50 text-slate-300 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 cursor-pointer transition-colors border border-red-800/50">
+                          <FileJson size={16} /> 匯入備份
+                          <input type="file" accept=".json" onChange={handleImportData} hidden />
+                        </label>
+                        <button onClick={exportData} className="bg-red-900/30 hover:bg-red-900/50 text-slate-300 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 transition-colors border border-red-800/50">
+                          <FileJson size={16} /> 匯出備份
+                        </button>
+                        <button onClick={exportReport} className="bg-amber-900/30 hover:bg-amber-900/50 text-amber-500 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 transition-colors border border-amber-800/50">
+                          <FileSpreadsheet size={16} /> 下載報表
+                        </button>
+                        <button onClick={() => { setNewMember({name:'',email:'',phone:'',address:'',birthday:'',points:0,level:'一般會員',photo:''}); setShowAddMemberModal(true); }} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ml-2"><Plus size={16} /> 新增</button>
                       </div>
                     </div>
                     <div className="overflow-x-auto">
@@ -732,9 +803,9 @@
 
           {/* Cart Sidebar */}
           {showCart && (
-            <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="fixed inset-0 z-[100] flex justify-end">
               <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCart(false)}></div>
-              <div className="relative w-full max-w-md bg-[#1a0b0b] border-l border-red-900/50 h-full shadow-2xl p-6 flex flex-col cart-enter">
+              <div className="relative w-full max-w-md bg-[#1a0b0b] border-l border-red-900/50 h-full shadow-2xl p-6 flex flex-col cart-enter z-[101]">
                 <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white flex items-center gap-2"><ShoppingCart/> 購物車</h3><button onClick={()=>setShowCart(false)}><X className="text-slate-400 hover:text-white"/></button></div>
                 <div className="flex-1 overflow-y-auto space-y-4">
                   {cart.length > 0 ? cart.map(item => (
