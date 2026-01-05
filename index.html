@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MUYUN 會員系統</title>
+  <title>MUYUN 會員系統 | 2026 丙午限定版</title>
   
-  <!-- 1. 載入 Tailwind CSS (樣式) -->
+  <!-- 1. 載入 Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- 2. 設定模組對應 -->
@@ -22,43 +22,54 @@
     }
   </script>
 
-  <!-- 3. 載入 Babel -->
+  <!-- 3. Babel -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
-    body { background-color: #020617; color: #e2e8f0; }
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    /* 2026 火馬年主題配色：深黑底 + 赤紅 + 流金 */
+    body { background-color: #0F0505; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
     
-    /* 聊天室動畫 */
-    @keyframes slideIn {
-      from { transform: translateY(20px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-    .chat-enter { animation: slideIn 0.3s ease-out forwards; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #1a0b0b; }
+    ::-webkit-scrollbar-thumb { background: #451a1a; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #7f1d1d; }
+    
+    /* 極光背景動畫 - 改為火紅與金黃色系 */
+    .orb { position: fixed; border-radius: 50%; filter: blur(100px); z-index: -1; pointer-events: none; animation: float 15s infinite ease-in-out; }
+    .orb-1 { top: -10%; left: -10%; width: 60vw; height: 60vw; background: rgba(220, 38, 38, 0.15); /* Red-600 */ } 
+    .orb-2 { bottom: -10%; right: -10%; width: 60vw; height: 60vw; background: rgba(245, 158, 11, 0.12); /* Amber-500 */ animation-delay: -5s; }
+    
+    @keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(20px, 20px); } }
+    
+    /* UI 特效 - 赤焰光暈 */
+    .tech-input:focus { box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); border-color: #ef4444; }
+    .glass-card { background: rgba(20, 5, 5, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(127, 29, 29, 0.3); }
+    
+    .chat-enter { animation: slideUp 0.3s ease-out forwards; }
+    .cart-enter { animation: slideLeft 0.3s ease-out forwards; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes slideLeft { from { transform: translateX(100%); } to { transform: translateX(0); } }
   </style>
 </head>
-<body>
+<body class="min-h-screen relative">
   <div id="root"></div>
 
-  <!-- 4. 主要程式碼區塊 -->
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useRef } from 'react';
     import { createRoot } from 'react-dom/client';
     import { initializeApp } from 'firebase/app';
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, deleteDoc, onSnapshot, arrayUnion, writeBatch, serverTimestamp, query, orderBy, limit } from 'firebase/firestore';
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken, signInAnonymously } from 'firebase/auth';
+    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, deleteDoc, onSnapshot, arrayUnion, writeBatch } from 'firebase/firestore';
     import { 
       User, Mail, Star, CreditCard, LogOut, Search, Plus, Trash2, Edit3, ChevronRight, 
       ShieldCheck, LayoutDashboard, UserPlus, Image as ImageIcon, Camera, Download, Upload, Gift, 
       History, TrendingUp, Phone, MapPin, Calendar, ShoppingBag, Tag, Package, ShoppingCart,
       Settings, Save, X, Truck, CheckCircle, Zap, Cpu, AlertTriangle, Bell, Megaphone, Info,
-      MessageCircle, Send, MessageSquare, ExternalLink
+      MessageCircle, Send, MessageSquare, ExternalLink, Lock, Minus, ArrowRight, Flame, HelpCircle
     } from 'lucide-react';
 
     // --- ⚠️ 設定區域 ⚠️ ---
+    // 請將您的 Firebase 設定填入此處
     let firebaseConfig = {
       apiKey: "AIzaSyA1oYaOhVjIjR1TOmsJ_9LTIGvbuRxD_OI",
 
@@ -75,12 +86,11 @@
   measurementId: "G-RNYN5YG02W"
     };
 
-    // 請在此填入您的 LINE@ ID (不含 @)
-    const LINE_ID = "257jomgi"; 
-
+    const LINE_ID = "muyun_official"; 
     let currentAppId = 'membership-system-tech';
     let initialAuthToken = undefined;
 
+    // 自動偵測環境變數 (Canvas 預覽用)
     if (typeof __firebase_config !== 'undefined') {
       try {
         firebaseConfig = JSON.parse(__firebase_config);
@@ -114,71 +124,80 @@
     ];
 
     const App = () => {
+      // User State
       const [user, setUser] = useState(null);
       const [isAdmin, setIsAdmin] = useState(false);
       const [view, setView] = useState('login'); 
       const [adminTab, setAdminTab] = useState('members');
       const [loading, setLoading] = useState(true);
 
+      // Data State
       const [memberData, setMemberData] = useState(null);
       const [allMembers, setAllMembers] = useState([]);
       const [products, setProducts] = useState([]);
       const [discountRules, setDiscountRules] = useState([]);
       const [newsList, setNewsList] = useState([]);
+      const [cart, setCart] = useState([]);
+      const [showCart, setShowCart] = useState(false);
+      const [searchTerm, setSearchTerm] = useState('');
 
       // Chat States
       const [chatOpen, setChatOpen] = useState(false);
       const [chatMessages, setChatMessages] = useState([]);
       const [chatInput, setChatInput] = useState('');
-      const [adminActiveChatId, setAdminActiveChatId] = useState(null); 
-      const [allChats, setAllChats] = useState([]); 
+      const [adminActiveChatId, setAdminActiveChatId] = useState(null);
+      const [allChats, setAllChats] = useState([]);
       const chatEndRef = useRef(null);
 
-      const [emailInput, setEmailInput] = useState('');
-      const [signupForm, setSignupForm] = useState({ name: '', email: '', phone: '', address: '', birthday: '', photo: '' });
+      // Form State
+      const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+      const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '', phone: '', address: '', birthday: '', photo: '' });
       
       const [productForm, setProductForm] = useState({ id: '', name: '', price: '', desc: '', image: '' });
       const [editingProduct, setEditingProduct] = useState(false);
       const [tempRules, setTempRules] = useState([]); 
       const [newMember, setNewMember] = useState({ name: '', email: '', phone: '', address: '', birthday: '', points: 0, level: '一般會員', photo: '' });
       const [newsForm, setNewsForm] = useState({ title: '', content: '' });
-      
-      // Payment Report State
       const [paymentForm, setPaymentForm] = useState({ orderId: '', last5: '', date: '' });
+      const [pointForm, setPointForm] = useState({ memberId: '', memberName: '', amount: 10, reason: '' });
 
+      // Modals
       const [showAddMemberModal, setShowAddMemberModal] = useState(false);
       const [showProductModal, setShowProductModal] = useState(false);
       const [showPointModal, setShowPointModal] = useState(false);
-      const [showBuyModal, setShowBuyModal] = useState(false);
       const [showOrderDetailModal, setShowOrderDetailModal] = useState(false);
       const [showNewsModal, setShowNewsModal] = useState(false);
-      const [showPaymentModal, setShowPaymentModal] = useState(false); 
-      
-      const [pointForm, setPointForm] = useState({ memberId: '', memberName: '', amount: 10, reason: '' });
-      const [buyForm, setBuyForm] = useState({ product: null, quantity: 1 });
+      const [showPaymentModal, setShowPaymentModal] = useState(false);
       const [selectedOrder, setSelectedOrder] = useState(null);
+      
+      // Error Handling Modal
+      const [showAuthErrorModal, setShowAuthErrorModal] = useState(false);
 
+      // --- Initialization ---
       useEffect(() => {
         if (!auth || !isConfigured) return; 
         const initAuth = async () => {
-          try {
-            if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
-            else await signInAnonymously(auth);
-          } catch (error) { console.error(error); }
+          if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
         };
         initAuth();
-        return onAuthStateChanged(auth, (u) => { if (u) { setUser(u); setLoading(false); } });
+        return onAuthStateChanged(auth, (u) => {
+          if (u) {
+            setUser(u);
+            if (u.email === 'admin@system.com' || (memberData && memberData.level === 'admin')) {
+              setIsAdmin(true); setView('admin');
+            } else {
+              setIsAdmin(false); setView('dashboard');
+            }
+          } else {
+            setUser(null); setView('login');
+          }
+          setLoading(false);
+        });
       }, []);
 
+      // --- Data Listeners ---
       useEffect(() => {
         if (!user || !db) return;
-
-        // Base Listeners
-        const unsubMembers = onSnapshot(collection(db, 'artifacts', currentAppId, 'public', 'data', 'members'), (snap) => {
-          const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setAllMembers(list);
-          if (memberData) setMemberData(list.find(m => m.id === memberData.id));
-        });
 
         const unsubProducts = onSnapshot(collection(db, 'artifacts', currentAppId, 'public', 'data', 'products'), (snap) => {
           if (snap.empty) DEFAULT_PRODUCTS.forEach(p => setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', p.id), p));
@@ -188,11 +207,9 @@
         const unsubSettings = onSnapshot(doc(db, 'artifacts', currentAppId, 'public', 'data', 'settings', 'config'), (docSnap) => {
           if (docSnap.exists()) {
             setDiscountRules(docSnap.data().rules || []);
-            // Initialize tempRules for editing
             setTempRules(docSnap.data().rules || []);
           } else {
             setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'settings', 'config'), { rules: DEFAULT_RULES });
-            setTempRules(DEFAULT_RULES);
           }
         });
 
@@ -202,7 +219,20 @@
           setNewsList(list);
         });
 
-        // Chat Listeners
+        let unsubMembers = () => {};
+        if (isAdmin) {
+          unsubMembers = onSnapshot(collection(db, 'artifacts', currentAppId, 'public', 'data', 'members'), (snap) => {
+            setAllMembers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+          });
+        } else {
+          unsubMembers = onSnapshot(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', user.uid), (docSnap) => {
+            if (docSnap.exists()) {
+              setMemberData({ id: docSnap.id, ...docSnap.data() });
+              if (docSnap.data().email === 'admin@system.com') { setIsAdmin(true); setView('admin'); }
+            }
+          });
+        }
+
         let unsubChat = () => {};
         let unsubAllChats = () => {};
 
@@ -235,12 +265,13 @@
            }
         }
 
-        return () => { unsubMembers(); unsubProducts(); unsubSettings(); unsubNews(); unsubChat(); unsubAllChats(); };
-      }, [user, memberData?.id, isAdmin, adminActiveChatId, allMembers.length]); 
+        return () => { unsubProducts(); unsubSettings(); unsubNews(); unsubMembers(); unsubChat(); unsubAllChats(); };
+      }, [user, isAdmin, adminActiveChatId, allMembers.length]); 
 
       const showToast = (msg, type='info') => {
         const el = document.createElement('div');
-        el.className = `fixed top-4 left-1/2 -translate-x-1/2 ${type === 'error' ? 'bg-red-500/90' : 'bg-cyan-600/90'} text-white px-6 py-3 rounded-lg shadow-[0_0_15px_rgba(0,0,0,0.5)] z-[100] animate-bounce font-bold backdrop-blur-md border border-white/20`;
+        const bgClass = type === 'error' ? 'bg-red-600/90 border-red-400/50' : 'bg-amber-600/90 border-amber-400/50';
+        el.className = `fixed top-4 left-1/2 -translate-x-1/2 ${bgClass} text-white px-6 py-3 rounded-lg shadow-[0_0_20px_rgba(251,191,36,0.3)] z-[100] animate-bounce font-bold backdrop-blur-md border border-white/20`;
         el.innerText = msg;
         document.body.appendChild(el);
         setTimeout(() => el.remove(), 3000);
@@ -252,270 +283,278 @@
         return applicable ? { rate: applicable.rate, label: applicable.label } : { rate: 1, label: "無折扣" };
       };
 
-      // --- Chat Logic ---
+      // --- Actions ---
+      const handleLogin = async (e) => {
+        if(e) e.preventDefault();
+        if (!loginForm.email || !loginForm.password) { showToast('請輸入帳號密碼', 'error'); return; }
+        try { await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password); showToast('登入成功'); } 
+        catch (e) { 
+          console.log("Login Error Code:", e.code); 
+          if(e.code === 'auth/operation-not-allowed') {
+            setShowAuthErrorModal(true);
+          } else {
+            showToast('登入失敗：' + e.message, 'error'); 
+          }
+        }
+      };
+
+      const handleSignup = async (e) => {
+        if(e) e.preventDefault();
+        if (!signupForm.name || !signupForm.email || !signupForm.password) { showToast('請填寫完整資料 (含密碼)', 'error'); return; }
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, signupForm.email, signupForm.password);
+          const uid = cred.user.uid;
+          const initialPoints = 200;
+          const data = { id: uid, ...signupForm, password: null, level: '一般會員', points: initialPoints, history: [{ date: new Date().toISOString(), reason: '入會禮', change: initialPoints }], orders: [], createdAt: new Date().toISOString(), photo: signupForm.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${signupForm.name}` };
+          delete data.password;
+          await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', uid), data);
+          showToast(`註冊成功！`);
+        } catch (e) { 
+          console.log("Signup Error Code:", e.code);
+          if(e.code === 'auth/operation-not-allowed') {
+             setShowAuthErrorModal(true);
+          } else if(e.code === 'auth/email-already-in-use') {
+            showToast('此 Email 已被使用', 'error');
+          } else {
+            showToast('註冊失敗: ' + e.message, 'error'); 
+          }
+        }
+      };
+
+      const addToCart = (product) => {
+        setCart(prev => {
+          const exist = prev.find(i => i.id === product.id);
+          if (exist) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+          return [...prev, { ...product, quantity: 1 }];
+        });
+        setShowCart(true);
+      };
+      const updateCartQty = (id, delta) => setCart(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i));
+      const removeFromCart = (id) => setCart(prev => prev.filter(i => i.id !== id));
+      const cartTotal = cart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+      const discountInfo = memberData ? getDiscountInfo(memberData.points) : { rate: 1, label: '' };
+      const finalTotal = Math.round(cartTotal * discountInfo.rate);
+
+      const handleCheckout = async () => {
+        if (cart.length === 0 || !memberData) return;
+        const newOrder = {
+          orderId: `ORD-${Date.now().toString().slice(-6)}`,
+          date: new Date().toISOString(),
+          items: cart.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.price, discountRate: discountInfo.rate })),
+          totalAmount: finalTotal,
+          status: 'pending',
+          shippingInfo: { name: memberData.name, phone: memberData.phone, address: memberData.address, email: memberData.email }
+        };
+        try {
+          const ref = doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', memberData.id);
+          await updateDoc(ref, { orders: arrayUnion(newOrder) });
+          setCart([]); setShowCart(false); showToast('訂單已送出！請至「我的帳戶」查看'); setView('dashboard');
+        } catch (e) { showToast('結帳失敗', 'error'); }
+      };
+
       const handleSendMessage = async (sender) => {
         if (!chatInput.trim()) return;
         const targetId = isAdmin ? adminActiveChatId : memberData.id;
         if (!targetId) return;
         const chatDocRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'chats', targetId);
-        const msgData = { sender: sender, text: chatInput, timestamp: Date.now(), read: false };
         try {
           await setDoc(chatDocRef, { lastMessage: chatInput, lastMessageTime: Date.now(), hasUnread: true }, { merge: true });
-          await setDoc(doc(collection(chatDocRef, 'messages')), msgData);
+          await setDoc(doc(collection(chatDocRef, 'messages')), { sender, text: chatInput, timestamp: Date.now() });
           setChatInput('');
-        } catch (e) { console.error("Send message error", e); }
+        } catch (e) { console.error(e); }
       };
 
-      // --- Payment Logic ---
+      const filteredMembers = allMembers.filter(m => {
+        if (!searchTerm) return true;
+        const term = searchTerm.toLowerCase();
+        return (m.name?.toLowerCase().includes(term) || m.email?.toLowerCase().includes(term) || m.phone?.includes(term));
+      });
+
       const handleReportPayment = async () => {
-        if (!paymentForm.last5 || !paymentForm.date) { showToast('請填寫完整資訊', 'error'); return; }
-        try {
-          const memberRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', memberData.id);
-          const updatedOrders = memberData.orders.map(o => {
-            if (o.orderId === paymentForm.orderId) {
-              return { ...o, status: 'verifying', paymentInfo: { method: 'remittance', last5: paymentForm.last5, date: paymentForm.date, reportedAt: new Date().toISOString() } };
-            }
-            return o;
-          });
-          await updateDoc(memberRef, { orders: updatedOrders });
-          showToast('匯款資訊已送出，客服將儘快查帳');
-          setShowPaymentModal(false);
-        } catch (e) { console.error(e); showToast('回報失敗', 'error'); }
+        if (!paymentForm.last5) { showToast('請填寫資料', 'error'); return; }
+        const updatedOrders = memberData.orders.map(o => o.orderId === paymentForm.orderId ? { ...o, status: 'verifying', paymentInfo: { method: 'remittance', last5: paymentForm.last5, date: paymentForm.date } } : o);
+        await updateDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', memberData.id), { orders: updatedOrders });
+        showToast('回報成功'); setShowPaymentModal(false);
       };
-
-      const handleConfirmPayment = async (orderId, memberId) => {
-        const member = allMembers.find(m => m.id === memberId);
-        if (!member) return;
-        const updatedOrders = member.orders.map(o => o.orderId === orderId ? { ...o, status: 'paid_confirmed' } : o);
-        await updateDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', memberId), { orders: updatedOrders });
-        if (selectedOrder && selectedOrder.orderId === orderId) { setSelectedOrder({ ...selectedOrder, status: 'paid_confirmed' }); }
+      
+      const handleConfirmPayment = async (oid, mid) => {
+        const m = allMembers.find(x => x.id === mid); if(!m) return;
+        const updatedOrders = m.orders.map(o => o.orderId === oid ? { ...o, status: 'paid_confirmed' } : o);
+        await updateDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', mid), { orders: updatedOrders });
+        if(selectedOrder && selectedOrder.orderId === oid) setSelectedOrder({...selectedOrder, status: 'paid_confirmed'});
         showToast('已確認收款');
       };
 
-      // --- Standard Actions ---
-      const handleLogin = () => {
-        if (!emailInput) return;
-        if (emailInput === 'admin@system.com') { setIsAdmin(true); setView('admin'); return; }
-        const found = allMembers.find(m => m.email.toLowerCase() === emailInput.toLowerCase());
-        if (found) { setMemberData(found); setView('dashboard'); } 
-        else { showToast('查無此帳號，請先註冊', 'error'); }
+      const handleUpdateOrderStatus = async (mid, oid, status) => {
+        const m = allMembers.find(x => x.id === mid); if(!m) return;
+        const updatedOrders = m.orders.map(o => o.orderId === oid ? { ...o, status } : o);
+        await updateDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', mid), { orders: updatedOrders });
+        if(selectedOrder && selectedOrder.orderId === oid) setSelectedOrder({...selectedOrder, status});
+        showToast('狀態更新');
       };
 
-      const handleSignup = async () => { 
-        if (!signupForm.name || !signupForm.email || !signupForm.phone) { showToast('請填寫完整資料', 'error'); return; }
-        if (allMembers.find(m => m.email === signupForm.email)) { showToast('Email 已存在', 'error'); return; }
-        const id = `M${Date.now().toString().slice(-6)}`;
-        const initialPoints = 200;
-        const data = { ...signupForm, id, level: '一般會員', points: initialPoints, history: [{ date: new Date().toISOString(), reason: '新會員入會禮', change: initialPoints }], orders: [], createdAt: new Date().toISOString(), photo: signupForm.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${signupForm.name}` };
+      const handleAdminAddMember = async () => {
+        if (!newMember.email) return;
+        const id = `M${Date.now()}`;
+        const data = { ...newMember, id, points: Number(newMember.points)||0, history: [], orders: [], createdAt: new Date().toISOString(), photo: newMember.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newMember.name}` };
         await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', id), data);
-        setMemberData(data); setView('dashboard'); showToast(`註冊成功！獲得 ${initialPoints} 點入會禮`);
+        setShowAddMemberModal(false); showToast('已新增會員');
       };
 
-      const handleAdminAddMember = async () => { 
-        if (!newMember.name || !newMember.email) { showToast('請填寫姓名與Email', 'error'); return; }
-        const id = `M${Date.now().toString().slice(-6)}`;
-        const data = { ...newMember, id, points: Number(newMember.points) || 0, history: [], orders: [], createdAt: new Date().toISOString(), photo: newMember.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${newMember.name}` };
-        await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', id), data);
-        setShowAddMemberModal(false); showToast('會員新增成功');
-      };
-
-      const handleSaveProduct = async () => { 
-        if (!productForm.name || !productForm.price) return;
+      const handleSaveProduct = async () => {
         const id = editingProduct ? productForm.id : `p${Date.now()}`;
         await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', id), { ...productForm, id, price: Number(productForm.price) });
-        setShowProductModal(false); showToast('商品已儲存');
+        setShowProductModal(false); showToast('商品儲存');
       };
-
-      const handleDeleteProduct = async (id) => { await deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', id)); showToast('商品已刪除'); };
-      
-      const handleSaveRules = async () => { await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'settings', 'config'), { rules: tempRules }); showToast('折扣規則已更新'); };
-      
-      const handlePublishNews = async () => {
-        if(!newsForm.title || !newsForm.content) { showToast('請填寫標題與內容', 'error'); return; }
-        const id = `news_${Date.now()}`; await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'news', id), { ...newsForm, id, date: new Date().toISOString() });
-        setNewsForm({ title: '', content: '' }); showToast('公告已發布');
-      };
-      
-      const handleDeleteNews = async (id) => { await deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'news', id)); showToast('公告已刪除'); };
-      
-      const handlePointAdjustment = async () => { 
-        if (!pointForm.memberId) return;
-        const member = allMembers.find(m => m.id === pointForm.memberId);
-        const newPoints = (member.points || 0) + Number(pointForm.amount);
+      const handleDeleteProduct = async (id) => { await deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', id)); showToast('商品刪除'); };
+      const handlePublishNews = async () => { const id = `news_${Date.now()}`; await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'news', id), { ...newsForm, id, date: new Date().toISOString() }); setNewsForm({title:'',content:''}); showToast('公告發布'); };
+      const handleDeleteNews = async (id) => { await deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'news', id)); showToast('公告刪除'); };
+      const handleSaveRules = async () => { await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'settings', 'config'), { rules: tempRules }); showToast('設定儲存'); };
+      const handlePointAdj = async () => {
+        const m = allMembers.find(x => x.id === pointForm.memberId); if(!m) return;
+        const newPoints = (m.points || 0) + Number(pointForm.amount);
         await updateDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', pointForm.memberId), { points: newPoints, history: arrayUnion({ date: new Date().toISOString(), reason: pointForm.reason, change: Number(pointForm.amount) }) });
-        setShowPointModal(false); showToast('點數已更新');
+        setShowPointModal(false); showToast('點數更新');
       };
 
-      const handleUpdateOrderStatus = async (memberId, orderId, newStatus) => {
-        const member = allMembers.find(m => m.id === memberId);
-        if (!member) return;
-        const updatedOrders = member.orders.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o);
-        await updateDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', memberId), { orders: updatedOrders });
-        if (selectedOrder && selectedOrder.orderId === orderId) setSelectedOrder({ ...selectedOrder, status: newStatus });
-        showToast('訂單狀態已更新');
-      };
-
-      const handlePlaceOrder = async () => { 
-        if (!buyForm.product || !memberData) return;
-        const { rate } = getDiscountInfo(memberData.points);
-        const unitPrice = buyForm.product.price;
-        const finalPrice = Math.round(unitPrice * rate);
-        const newOrder = { orderId: `ORD-${Date.now().toString().slice(-6)}`, date: new Date().toISOString(), items: [{ name: buyForm.product.name, quantity: buyForm.quantity, unitPrice, discountRate: rate }], totalAmount: finalPrice * buyForm.quantity, status: 'pending', shippingInfo: { name: memberData.name, phone: memberData.phone, address: memberData.address, email: memberData.email } };
-        const memberRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', memberData.id);
-        await updateDoc(memberRef, { orders: arrayUnion(newOrder) });
-        showToast('訂單已送出！請至「我的帳戶」回報匯款'); setShowBuyModal(false); setView('dashboard');
-      };
-      
-      const exportToCSV = () => { if (allMembers.length === 0) return; const headers = ['ID,姓名,Email,電話,生日,地址,點數']; const csv = allMembers.map(m => `${m.id},"${m.name}",${m.email},"${m.phone||''}",${m.birthday||''},"${m.address||''}",${m.points}`).join('\n'); const blob = new Blob(['\uFEFF'+headers+'\n'+csv], {type:'text/csv'}); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href=url; link.download='Export.csv'; link.click(); };
-      const handleImportCSV = async (e) => { const file=e.target.files[0]; if(!file)return; const reader=new FileReader(); reader.onload=async(ev)=>{ const lines=ev.target.result.split('\n').filter(l=>l.trim()); const batch=writeBatch(db); for(let i=1;i<lines.length;i++){ const cols=lines[i].split(',').map(c=>c.replace(/"/g,'').trim()); if(cols.length<2)continue; const id=cols[0].startsWith('M')?cols[0]:`M${Date.now()+i}`; const data={id, name:cols[1]||'Unknown', email:cols[2]||'', phone:cols[3]||'', birthday:cols[4]||'', address:cols[5]||'', points:Number(cols[6])||0, level:'一般會員', history:[], orders:[], createdAt:new Date().toISOString(), photo:`https://api.dicebear.com/7.x/avataaars/svg?seed=${cols[1]}`}; batch.set(doc(db,'artifacts',currentAppId,'public','data','members',id), data, {merge:true}); } await batch.commit(); showToast('匯入成功'); }; reader.readAsText(file); e.target.value=''; };
-
-      if (!isConfigured) return (
-        <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 space-y-6">
-          <div className="w-24 h-24 bg-red-900/30 rounded-full flex items-center justify-center border border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.2)]"><AlertTriangle size={48} className="text-red-500" /></div>
-          <div><h1 className="text-3xl font-bold text-white mb-2">系統尚未連結資料庫</h1><p className="text-slate-400">請編輯 index.html 填入 Firebase 設定。</p></div>
-        </div>
-      );
-
-      if (loading) return <div className="flex justify-center items-center h-screen bg-slate-950 text-cyan-500"><div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan-500 border-t-transparent shadow-[0_0_20px_rgba(6,182,212,0.5)]"></div></div>;
+      if (!isConfigured) return <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 space-y-6 text-white"><AlertTriangle size={48} className="text-red-500" /><h1>請設定 index.html 中的 Firebase Config</h1></div>;
+      if (loading) return <div className="flex justify-center items-center h-screen bg-[#0F0505] text-red-500"><div className="animate-spin rounded-full h-12 w-12 border-4 border-red-500 border-t-transparent shadow-[0_0_20px_rgba(239,68,68,0.5)]"></div></div>;
 
       return (
-        <div className="min-h-screen bg-slate-950 font-sans text-slate-200 selection:bg-cyan-500/30 pb-20">
-          {/* Navbar */}
-          <nav className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 sticky top-0 z-20 flex justify-between items-center shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
-            <div className="flex items-center gap-2 font-bold text-xl text-cyan-400 cursor-pointer tracking-wider" onClick={() => setView('login')}>
-              <Cpu className="text-cyan-400" /> <span>MUYUN<span className="text-white">會員系統</span></span>
-            </div>
-            {view !== 'login' && view !== 'signup' && (
+        <div className="min-h-screen bg-[#0F0505] font-sans text-slate-200 selection:bg-red-500/30 pb-20 relative">
+          <div className="orb orb-1"></div><div className="orb orb-2"></div>
+          
+          {/* Navbar - Hidden on Login/Signup */}
+          {user && (
+            <nav className="bg-[#1a0b0b]/80 backdrop-blur-md border-b border-red-900/30 px-6 py-4 sticky top-0 z-20 flex justify-between items-center shadow-lg">
+              <div className="flex items-center gap-2 font-bold text-xl text-red-500 cursor-pointer tracking-wider" onClick={() => !user && setView('login')}>
+                <Flame className="text-red-500 fill-red-500" /> <span>MUYUN<span className="text-white">會員系統</span></span>
+              </div>
               <div className="flex items-center gap-3">
                 {!isAdmin ? (
                   <>
-                    <button onClick={() => setView('shop')} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${view === 'shop' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><ShoppingBag size={18} /> <span className="hidden sm:inline">商城</span></button>
-                    <button onClick={() => setView('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${view === 'dashboard' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><LayoutDashboard size={18} /> <span className="hidden sm:inline">控制台</span></button>
-                    <button onClick={() => setShowNewsModal(true)} className="relative p-2 text-slate-400 hover:text-cyan-400 transition-colors"><Bell size={20} />{newsList.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</button>
+                    <button onClick={() => setView('shop')} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-all ${view==='shop'?'bg-red-900/40 text-red-400 border border-red-500/50':'text-slate-400 hover:text-white hover:bg-white/5'}`}><ShoppingBag size={18}/> <span className="hidden sm:inline">商城</span></button>
+                    <button onClick={() => setView('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-all ${view==='dashboard'?'bg-red-900/40 text-red-400 border border-red-500/50':'text-slate-400 hover:text-white hover:bg-white/5'}`}><LayoutDashboard size={18}/> <span className="hidden sm:inline">帳戶</span></button>
+                    <button onClick={() => setShowCart(true)} className="relative p-2 text-slate-400 hover:text-amber-400 transition-colors"><ShoppingCart size={20}/>{cart.length>0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold">{cart.length}</span>}</button>
+                    <button onClick={() => setShowNewsModal(true)} className="relative p-2 text-slate-400 hover:text-amber-400 transition-colors"><Bell size={20}/>{newsList.length>0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}</button>
                   </>
                 ) : (
-                  <span className="px-3 py-1 bg-purple-900/50 border border-purple-500/50 text-purple-300 text-xs rounded-full shadow-[0_0_10px_rgba(168,85,247,0.3)]">ADMIN ACCESS</span>
+                  <span className="px-3 py-1 bg-amber-900/30 border border-amber-500/50 text-amber-500 text-xs rounded-full">ADMIN</span>
                 )}
-                <div className="w-px h-6 bg-slate-700 mx-2"></div>
-                <button onClick={() => { setView('login'); setIsAdmin(false); setMemberData(null); setChatOpen(false); }} className="text-slate-500 hover:text-red-400 transition-colors"><LogOut size={18} /></button>
+                <div className="w-px h-6 bg-white/10 mx-2"></div>
+                <button onClick={() => { signOut(auth); setUser(null); setCart([]); }} className="text-slate-500 hover:text-red-400"><LogOut size={18}/></button>
               </div>
-            )}
-          </nav>
+            </nav>
+          )}
 
           <main className="max-w-6xl mx-auto p-4 md:p-8 relative">
-            {/* ... Login/Signup/Dashboard/Shop/News views logic ... */}
+            {/* Login View */}
             {view === 'login' && (
-              <div className="max-w-md mx-auto mt-20 bg-slate-900/50 backdrop-blur-xl border border-slate-700 rounded-3xl shadow-2xl overflow-hidden relative group">
-                <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 to-transparent pointer-events-none"></div>
-                <div className="p-8 text-center relative z-10">
-                  <div className="w-20 h-20 bg-cyan-950 rounded-full flex items-center justify-center mx-auto mb-6 border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)]"><Zap size={40} className="text-cyan-400" /></div>
-                  <h2 className="text-3xl font-bold text-white mb-2">歡迎登入系統</h2>
-                  <p className="text-slate-400">請輸入您的電子郵件以繼續</p>
-                </div>
-                <div className="p-8 pt-0 space-y-5 relative z-10">
-                  <input type="email" placeholder="Email Address" className="w-full p-4 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
-                  <button onClick={handleLogin} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-4 rounded-xl font-bold shadow-[0_0_20px_rgba(8,145,178,0.4)] transition-all">連接系統</button>
-                  <div className="text-center pt-2"><button onClick={() => setView('signup')} className="text-cyan-400 text-sm hover:underline">註冊新帳號</button></div>
-                  <div className="absolute bottom-2 right-4 text-[10px] text-slate-700 font-mono">muyun</div>
-                </div>
-              </div>
-            )}
-
-            {view === 'signup' && (
-              <div className="max-w-lg mx-auto mt-10 bg-slate-900/50 backdrop-blur-xl border border-slate-700 rounded-3xl shadow-2xl overflow-hidden">
-                <div className="bg-slate-800/50 p-6 text-center border-b border-slate-700"><h2 className="text-2xl font-bold text-white">建立新帳戶</h2><p className="text-cyan-400 text-sm mt-1">立即加入，即刻獲贈 200 點數</p></div>
-                <div className="p-8 space-y-4">
-                  <input type="text" placeholder="姓名 *" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={signupForm.name} onChange={e => setSignupForm({...signupForm, name: e.target.value})} />
-                  <input type="tel" placeholder="電話 *" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={signupForm.phone} onChange={e => setSignupForm({...signupForm, phone: e.target.value})} />
-                  <input type="email" placeholder="Email *" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={signupForm.email} onChange={e => setSignupForm({...signupForm, email: e.target.value})} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <input type="date" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-slate-400 outline-none focus:border-cyan-500" value={signupForm.birthday} onChange={e => setSignupForm({...signupForm, birthday: e.target.value})} />
-                    <input type="text" placeholder="地址" className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-white outline-none focus:border-cyan-500" value={signupForm.address} onChange={e => setSignupForm({...signupForm, address: e.target.value})} />
+              <div className="flex flex-col items-center justify-center min-h-[80vh]">
+                <div className="w-full max-w-md p-8 glass-card rounded-3xl shadow-2xl relative overflow-hidden group">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-50"></div>
+                  <div className="text-center mb-8 relative z-10">
+                    <div className="w-20 h-20 bg-[#1a0b0b] rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
+                      <Flame size={40} className="text-red-500 fill-red-500/20" />
+                    </div>
+                    <h2 className="text-3xl font-bold text-white tracking-wide mb-2">會員登入</h2>
+                    <p className="text-slate-400 text-sm">2026 丙午火馬年限定版</p>
                   </div>
-                  <button onClick={handleSignup} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-3 rounded-xl font-bold shadow-lg mt-4 transition-all">確認註冊</button>
-                  <div className="text-center"><button onClick={() => setView('login')} className="text-slate-500 text-sm hover:text-white">返回登入</button></div>
+                  <form className="space-y-5 relative z-10" onSubmit={handleLogin}>
+                    <div className="relative group/input"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-red-400" size={20}/><input type="email" placeholder="電子郵件" className="tech-input w-full p-4 pl-12 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-white outline-none transition-all duration-300" value={loginForm.email} onChange={e => setLoginForm({...loginForm, email: e.target.value})} /></div>
+                    <div className="relative group/input"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-red-400" size={20}/><input type="password" placeholder="密碼" className="tech-input w-full p-4 pl-12 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-white outline-none transition-all duration-300" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} /></div>
+                    <button type="submit" className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white py-4 rounded-xl font-bold shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(249,115,22,0.6)] transition-all duration-300 transform active:scale-[0.98] flex items-center justify-center gap-2"><span>連接系統</span><ArrowRight size={16}/></button>
+                    <div className="flex justify-between items-center pt-2 text-sm"><span className="text-slate-500 cursor-pointer hover:text-slate-300">忘記密碼？</span><span onClick={() => setView('signup')} className="text-amber-500 hover:text-amber-400 hover:underline cursor-pointer">註冊新帳號</span></div>
+                  </form>
+                  <div className="absolute bottom-3 right-5 text-[10px] text-slate-700 font-mono tracking-widest opacity-50">muyun</div>
                 </div>
               </div>
             )}
 
-            {/* Dashboard View */}
+            {/* Signup View */}
+            {view === 'signup' && (
+              <div className="flex flex-col items-center justify-center min-h-[80vh]">
+                <div className="w-full max-w-lg p-8 glass-card rounded-3xl shadow-2xl relative overflow-hidden">
+                  <div className="text-center mb-6 relative z-10 border-b border-red-900/30 pb-4">
+                    <h2 className="text-2xl font-bold text-white">建立帳戶</h2><p className="text-amber-500 text-sm mt-1">立即加入，開啟鴻運年</p>
+                  </div>
+                  <form className="space-y-4 relative z-10" onSubmit={handleSignup}>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input type="text" placeholder="姓名 *" className="tech-input w-full p-3 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-white outline-none" value={signupForm.name} onChange={e => setSignupForm({...signupForm, name: e.target.value})} />
+                      <input type="tel" placeholder="電話 *" className="tech-input w-full p-3 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-white outline-none" value={signupForm.phone} onChange={e => setSignupForm({...signupForm, phone: e.target.value})} />
+                    </div>
+                    <input type="email" placeholder="Email *" className="tech-input w-full p-3 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-white outline-none" value={signupForm.email} onChange={e => setSignupForm({...signupForm, email: e.target.value})} />
+                    <input type="password" placeholder="設定密碼 *" className="tech-input w-full p-3 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-white outline-none" value={signupForm.password} onChange={e => setSignupForm({...signupForm, password: e.target.value})} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <input type="date" className="tech-input w-full p-3 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-slate-400 outline-none" value={signupForm.birthday} onChange={e => setSignupForm({...signupForm, birthday: e.target.value})} />
+                      <input type="text" placeholder="地址" className="tech-input w-full p-3 bg-[#0F0505]/80 border border-slate-800 rounded-xl text-white outline-none" value={signupForm.address} onChange={e => setSignupForm({...signupForm, address: e.target.value})} />
+                    </div>
+                    <button type="submit" className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white py-3 rounded-xl font-bold shadow-lg mt-2 transition-all">確認註冊</button>
+                    <div className="text-center"><span onClick={() => setView('login')} className="text-slate-500 text-sm hover:text-white cursor-pointer">返回登入</span></div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Dashboard */}
             {view === 'dashboard' && memberData && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                <div className="bg-slate-900/60 backdrop-blur-md p-8 rounded-3xl border border-slate-700 flex flex-col md:flex-row gap-8 items-center relative overflow-hidden">
-                  <div className="relative">
-                    <div className="w-28 h-28 rounded-full p-[2px] bg-gradient-to-tr from-cyan-400 to-purple-600"><img src={memberData.photo} className="w-full h-full rounded-full object-cover bg-slate-950" /></div>
-                    <div className="absolute bottom-0 right-0 bg-slate-900 rounded-full p-1 border border-slate-700"><div className="bg-green-500 w-4 h-4 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.6)]"></div></div>
-                  </div>
-                  <div className="text-center md:text-left flex-1 relative z-10">
-                    <h2 className="text-4xl font-bold text-white mb-2">{memberData.name}</h2>
-                    <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-2">
-                      <span className="px-4 py-1 bg-slate-800 text-slate-300 rounded-full text-sm border border-slate-600">{memberData.level}</span>
-                      <span className="px-4 py-1 bg-cyan-950/50 text-cyan-400 rounded-full text-sm border border-cyan-500/30 flex items-center gap-2 shadow-[0_0_10px_rgba(34,211,238,0.1)]"><Tag size={14} /> {getDiscountInfo(memberData.points).label}</span>
+                <div className="bg-[#1a0b0b]/60 backdrop-blur-md p-8 rounded-3xl border border-red-900/30 flex flex-col md:flex-row gap-8 items-center relative overflow-hidden">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-red-500 to-amber-500 p-[2px]"><img src={memberData.photo} className="w-full h-full rounded-full object-cover bg-[#0F0505]" /></div>
+                  <div className="flex-1 text-center md:text-left">
+                    <h2 className="text-3xl font-bold text-white">{memberData.name}</h2>
+                    <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-2">
+                      <span className="px-3 py-1 bg-red-900/30 text-red-200 rounded-full text-sm border border-red-800/50">{memberData.level}</span>
+                      <span className="px-3 py-1 bg-amber-900/30 text-amber-400 rounded-full text-sm border border-amber-500/30 flex items-center gap-1"><Tag size={14}/> {getDiscountInfo(memberData.points).label}</span>
                     </div>
-                    <div className="mt-4 text-slate-400 text-sm font-mono flex gap-4 justify-center md:justify-start"><span>ID: {memberData.id}</span><span className="text-slate-600">|</span><span>{memberData.email}</span></div>
+                    <div className="mt-3 text-slate-400 text-sm">{memberData.email}</div>
                   </div>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-6">
-                  <div className="bg-gradient-to-br from-cyan-900 to-slate-900 p-8 rounded-3xl text-white shadow-lg relative overflow-hidden border border-cyan-500/20 group">
+                  <div className="bg-gradient-to-br from-red-900 to-[#1a0b0b] p-8 rounded-3xl text-white shadow-lg border border-red-500/20 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
                     <div className="relative z-10">
-                      <div className="flex justify-between mb-8"><CreditCard size={32} className="text-cyan-400" /> <span className="font-mono text-cyan-300/50 tracking-[0.2em]">POINTS BALANCE</span></div>
-                      <h3 className="text-6xl font-black my-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-cyan-200">{memberData.points}</h3>
-                      <div className="w-full bg-slate-950/50 h-1 mt-6 rounded-full overflow-hidden"><div className="h-full bg-cyan-500 shadow-[0_0_10px_rgba(34,211,238,0.8)]" style={{width: `${Math.min((memberData.points/1000)*100, 100)}%`}}></div></div>
-                      <p className="text-xs text-cyan-200/60 mt-2 font-mono text-right">Target: 1000 pts</p>
+                      <div className="flex justify-between mb-8"><CreditCard size={32} className="text-amber-400" /> <span className="font-mono text-amber-500/50">POINTS</span></div>
+                      <h3 className="text-6xl font-black my-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-amber-200">{memberData.points}</h3>
+                      <div className="w-full bg-[#0F0505]/50 h-1 mt-6 rounded-full overflow-hidden"><div className="h-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" style={{width: `${Math.min((memberData.points/1000)*100, 100)}%`}}></div></div>
+                      <p className="text-xs text-amber-200/60 mt-2 font-mono text-right">Target: 1000 pts</p>
                     </div>
                   </div>
-
-                  <div className="bg-slate-900/60 backdrop-blur-md p-6 rounded-3xl border border-slate-700 overflow-y-auto max-h-[300px]">
-                    <h4 className="font-bold flex items-center gap-2 mb-4 text-white"><Package className="text-purple-400" /> 近期訂單</h4>
-                    {memberData.orders?.length > 0 ? (
-                      [...memberData.orders].reverse().map((order, i) => (
-                        <div key={i} className="p-4 mb-3 bg-slate-950/50 rounded-xl border border-slate-800 flex flex-col gap-2 text-sm hover:border-slate-600 transition-colors">
-                          <div className="flex justify-between items-center">
-                            <div><div className="font-bold text-slate-200">{new Date(order.date).toLocaleDateString()}</div><div className="text-slate-500 text-xs mt-1">{order.items[0].name} 等 {order.items.length} 項</div></div>
-                            <div className="text-right">
-                              <div className="font-bold text-cyan-400 text-lg">${order.totalAmount}</div>
-                              <span className={`text-[10px] px-2 py-0.5 rounded uppercase tracking-wider ${order.status === 'shipped' ? 'bg-green-900 text-green-400' : 'bg-yellow-900 text-yellow-400'}`}>
-                                {order.status === 'shipped' ? 'Shipped' : order.status === 'paid_confirmed' ? 'Paid' : order.status === 'verifying' ? 'Verifying' : 'Pending'}
-                              </span>
-                            </div>
-                          </div>
-                          {order.status === 'pending' && (
-                            <button onClick={() => { setPaymentForm({orderId: order.orderId, last5: '', date: ''}); setShowPaymentModal(true); }} className="w-full bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-xs font-bold transition-colors border border-slate-600 mt-2">回報匯款後五碼</button>
-                          )}
+                  <div className="bg-[#1a0b0b]/60 backdrop-blur-md p-6 rounded-3xl border border-red-900/30 overflow-y-auto max-h-[300px]">
+                    <h4 className="font-bold flex items-center gap-2 mb-4 text-white"><Package className="text-amber-400" /> 近期訂單</h4>
+                    {memberData.orders?.length > 0 ? [...memberData.orders].reverse().map((o, i) => (
+                      <div key={i} className="p-4 mb-3 bg-[#0F0505]/50 rounded-xl border border-red-900/20 flex flex-col gap-2 text-sm">
+                        <div className="flex justify-between mb-2">
+                          <div><div className="font-bold text-slate-200">{new Date(o.date).toLocaleDateString()}</div><div className="text-slate-500 text-xs">{o.items.length} 項商品</div></div>
+                          <div className="text-right"><div className="font-bold text-amber-400">${o.totalAmount}</div><span className="text-xs text-slate-500">{o.status}</span></div>
                         </div>
-                      ))
-                    ) : <div className="text-center text-slate-600 py-10 font-mono">NO ORDERS FOUND</div>}
+                        {o.status === 'pending' && <button onClick={()=>{setPaymentForm({orderId:o.orderId,last5:'',date:''});setShowPaymentModal(true)}} className="w-full bg-red-900/30 text-xs py-2 rounded border border-red-800 hover:bg-red-800 text-white">回報匯款</button>}
+                      </div>
+                    )) : <div className="text-center text-slate-600 py-10">尚無訂單</div>}
                   </div>
                 </div>
               </div>
             )}
 
             {/* Shop View */}
-            {view === 'shop' && (
+            {view === 'shop' && memberData && (
               <div className="animate-in fade-in slide-in-from-right-4">
-                <div className="bg-gradient-to-r from-purple-900 to-slate-900 rounded-3xl p-8 text-white mb-8 shadow-2xl border border-purple-500/20 relative overflow-hidden">
-                  <h2 className="text-3xl font-bold relative z-10">未來商城</h2>
-                  <p className="opacity-80 mt-2 font-mono text-purple-200 relative z-10">BALANCE: <span className="font-bold text-xl text-white">{memberData.points}</span> PTS</p>
+                <div className="bg-gradient-to-r from-red-900 to-[#1a0b0b] rounded-3xl p-8 text-white mb-8 shadow-2xl border border-red-500/20">
+                  <h2 className="text-3xl font-bold text-white">未來商城</h2>
+                  <p className="opacity-80 mt-2 font-mono text-amber-200">BALANCE: {memberData.points} PTS <span className="bg-red-500/20 px-2 rounded text-xs ml-2 border border-red-500/30">{getDiscountInfo(memberData.points).label}</span></p>
                 </div>
                 <div className="grid md:grid-cols-2 gap-8">
                   {products.map(p => {
                     const { rate } = getDiscountInfo(memberData.points);
                     const price = Math.round(p.price * rate);
                     return (
-                      <div key={p.id} className="bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden hover:border-cyan-500/50 transition-all group">
-                        <div className="h-56 overflow-hidden relative">
-                          <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                          {rate < 1 && <div className="absolute top-4 right-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">SALE</div>}
-                        </div>
-                        <div className="p-6 relative">
+                      <div key={p.id} className="bg-[#1a0b0b] border border-red-900/30 rounded-3xl overflow-hidden hover:border-amber-500/50 transition-all hover:shadow-[0_0_20px_rgba(245,158,11,0.1)]">
+                        <div className="h-56 relative"><img src={p.image} className="w-full h-full object-cover" />{rate < 1 && <div className="absolute top-4 right-4 bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">SALE</div>}</div>
+                        <div className="p-6">
                           <h3 className="text-xl font-bold text-white mb-1">{p.name}</h3>
-                          <div className="flex justify-between items-end mb-6">
-                            <div>{rate < 1 && <span className="text-slate-600 line-through text-xs mr-2">${p.price}</span>}<span className="text-3xl font-bold text-cyan-400">${price}</span></div>
-                          </div>
-                          <button onClick={() => { setBuyForm({ product: p, quantity: 1 }); setShowBuyModal(true); }} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold flex justify-center gap-2 hover:bg-cyan-600 transition-colors border border-slate-700 hover:border-cyan-500">
-                            <ShoppingCart size={18} /> 加入訂單
-                          </button>
+                          <div className="flex justify-between items-end mb-6"><div>{rate < 1 && <span className="text-slate-600 line-through text-xs mr-2">${p.price}</span>}<span className="text-3xl font-bold text-amber-400">${price}</span></div></div>
+                          <button onClick={() => addToCart(p)} className="w-full bg-[#0F0505] text-white py-3 rounded-xl font-bold flex justify-center gap-2 hover:bg-red-600/20 border border-red-800 hover:border-red-500 transition-colors"><Plus size={18} /> 加入購物車</button>
                         </div>
                       </div>
                     );
@@ -524,43 +563,43 @@
               </div>
             )}
 
-            {/* ADMIN View with FULL Functionality */}
+            {/* Admin View */}
             {view === 'admin' && (
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                  <h2 className="text-2xl font-bold flex items-center gap-2 text-white"><ShieldCheck className="text-purple-400" /> 系統管理中樞</h2>
-                  <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-700">
+                  <h2 className="text-2xl font-bold flex items-center gap-2 text-white"><ShieldCheck className="text-amber-400" /> 系統管理</h2>
+                  <div className="flex bg-[#1a0b0b] p-1 rounded-xl border border-red-900/30">
                     {['members', 'products', 'orders', 'support', 'news', 'settings'].map(tab => (
-                      <button key={tab} onClick={() => setAdminTab(tab)} className={`px-5 py-2 rounded-lg text-sm font-bold capitalize transition-all ${adminTab === tab ? 'bg-slate-800 text-cyan-400 shadow-md' : 'text-slate-500 hover:text-slate-300'}`}>
-                        {tab === 'support' ? '客服' : tab === 'members' ? '會員' : tab === 'products' ? '商品' : tab === 'orders' ? '訂單' : tab === 'news' ? '公告' : '設定'}
-                      </button>
+                      <button key={tab} onClick={() => setAdminTab(tab)} className={`px-4 py-2 rounded-lg text-sm font-bold capitalize transition-colors ${adminTab === tab ? 'bg-red-900/40 text-amber-400 shadow' : 'text-slate-500 hover:text-slate-300'}`}>{tab === 'members' ? '會員' : tab === 'products' ? '商品' : tab === 'orders' ? '訂單' : tab === 'support' ? '客服' : tab === 'news' ? '公告' : '設定'}</button>
                     ))}
                   </div>
                 </div>
 
-                {/* Admin: Members - FULLY RESTORED */}
+                {/* Admin: Members */}
                 {adminTab === 'members' && (
-                  <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
-                    <div className="p-4 border-b border-slate-700 flex flex-wrap justify-between items-center bg-slate-800/50 gap-2">
-                      <span className="font-bold text-slate-200">會員資料庫 ({allMembers.length})</span>
+                  <div className="bg-[#1a0b0b] rounded-2xl border border-red-900/30 overflow-hidden shadow-xl">
+                    <div className="p-4 border-b border-red-900/30 flex flex-wrap justify-between items-center bg-red-950/20 gap-2">
+                      <div className="flex items-center gap-4">
+                        <span className="font-bold text-slate-200">會員資料</span>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                          <input type="text" placeholder="搜尋會員..." className="bg-[#0F0505] border border-red-900/50 rounded-full pl-10 pr-4 py-1 text-sm text-white outline-none focus:border-amber-500 w-64" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                        </div>
+                      </div>
                       <div className="flex gap-2">
-                        <label className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 cursor-pointer transition-colors border border-slate-600">
-                          <Upload size={16} /> 匯入 <input type="file" accept=".csv" onChange={handleImportCSV} hidden />
-                        </label>
-                        <button onClick={exportToCSV} className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 transition-colors border border-slate-600"><Download size={16} /> 匯出</button>
-                        <button onClick={() => { setNewMember({ name: '', email: '', phone: '', address: '', birthday: '', points: 0, level: '一般會員', photo: '' }); setShowAddMemberModal(true); }} className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1"><Plus size={16} /> 新增</button>
+                        <button onClick={() => { setNewMember({name:'',email:'',phone:'',address:'',birthday:'',points:0,level:'一般會員',photo:''}); setShowAddMemberModal(true); }} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1"><Plus size={16} /> 新增</button>
                       </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm text-slate-300">
-                        <thead className="text-slate-500 border-b border-slate-700 bg-slate-900/50"><tr><th className="p-4">會員資訊</th><th className="p-4">點數餘額</th><th className="p-4 text-right">操作</th></tr></thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {allMembers.map(m => (
-                            <tr key={m.id} className="hover:bg-slate-800/50 transition-colors">
-                              <td className="p-4"><div className="font-bold text-white">{m.name}</div><div className="text-xs text-slate-500 font-mono">{m.email}</div></td>
-                              <td className="p-4 font-mono text-cyan-400">{m.points}</td>
+                        <thead className="text-slate-500 border-b border-red-900/30 bg-red-950/10"><tr><th className="p-4">會員資訊</th><th className="p-4">點數</th><th className="p-4 text-right">操作</th></tr></thead>
+                        <tbody className="divide-y divide-red-900/20">
+                          {filteredMembers.map(m => (
+                            <tr key={m.id} className="hover:bg-red-900/10">
+                              <td className="p-4"><div className="font-bold text-white">{m.name}</div><div className="text-xs text-slate-500 font-mono">{m.email} | {m.phone}</div></td>
+                              <td className="p-4 font-mono text-amber-400">{m.points}</td>
                               <td className="p-4 text-right">
-                                <button onClick={() => { setPointForm({ memberId: m.id, memberName: m.name, amount: 10, reason: '' }); setShowPointModal(true); }} className="text-slate-900 bg-cyan-400 px-3 py-1 rounded text-xs font-bold mr-2 hover:bg-cyan-300">增減點數</button>
+                                <button onClick={() => { setPointForm({ memberId: m.id, memberName: m.name, amount: 10, reason: '' }); setShowPointModal(true); }} className="text-amber-500 bg-amber-900/20 px-3 py-1 rounded text-xs font-bold mr-2 hover:bg-amber-900/40">點數</button>
                                 <button onClick={() => deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'members', m.id))} className="text-slate-600 hover:text-red-400"><Trash2 size={18} /></button>
                               </td>
                             </tr>
@@ -571,21 +610,21 @@
                   </div>
                 )}
 
-                {/* Admin: Products - FULLY RESTORED */}
+                {/* Admin: Products */}
                 {adminTab === 'products' && (
-                  <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
-                    <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+                  <div className="bg-[#1a0b0b] rounded-2xl border border-red-900/30 overflow-hidden">
+                    <div className="p-4 border-b border-red-900/30 flex justify-between items-center bg-red-950/20">
                       <span className="font-bold text-slate-200">商品清單</span>
                       <button onClick={() => { setProductForm({ id: '', name: '', price: '', desc: '', image: '' }); setEditingProduct(false); setShowProductModal(true); }} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1"><Plus size={16} /> 上架</button>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4 p-4">
                       {products.map(p => (
-                        <div key={p.id} className="flex gap-4 border border-slate-700 bg-slate-800/30 p-3 rounded-xl items-center">
+                        <div key={p.id} className="flex gap-4 border border-red-900/30 bg-red-950/10 p-3 rounded-xl items-center">
                           <img src={p.image} className="w-16 h-16 rounded-lg object-cover bg-slate-800" />
-                          <div className="flex-1"><div className="font-bold text-white">{p.name}</div><div className="text-sm text-cyan-400">${p.price}</div></div>
+                          <div className="flex-1"><div className="font-bold text-white">{p.name}</div><div className="text-sm text-amber-400">${p.price}</div></div>
                           <div className="flex gap-2">
-                            <button onClick={() => { setProductForm(p); setEditingProduct(true); setShowProductModal(true); }} className="p-2 text-slate-400 hover:text-cyan-400 bg-slate-800 rounded-lg"><Edit3 size={16} /></button>
-                            <button onClick={() => handleDeleteProduct(p.id)} className="p-2 text-slate-400 hover:text-red-400 bg-slate-800 rounded-lg"><Trash2 size={16} /></button>
+                            <button onClick={() => { setProductForm(p); setEditingProduct(true); setShowProductModal(true); }} className="p-2 text-slate-400 hover:text-amber-400 bg-slate-900 rounded-lg"><Edit3 size={16} /></button>
+                            <button onClick={() => handleDeleteProduct(p.id)} className="p-2 text-slate-400 hover:text-red-400 bg-slate-900 rounded-lg"><Trash2 size={16} /></button>
                           </div>
                         </div>
                       ))}
@@ -595,26 +634,22 @@
 
                 {/* Admin: Orders */}
                 {adminTab === 'orders' && (
-                  <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
-                    <div className="p-4 border-b border-slate-700 bg-slate-800/50 font-bold text-slate-200">訂單監控</div>
+                  <div className="bg-[#1a0b0b] rounded-2xl border border-red-900/30 overflow-hidden">
+                    <div className="p-4 border-b border-red-900/30 bg-red-950/20 font-bold text-slate-200">訂單監控</div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm text-slate-300">
-                        <thead className="text-slate-500 border-b border-slate-700 bg-slate-900"><tr><th className="p-4">訂單編號</th><th className="p-4">訂購人</th><th className="p-4">金額</th><th className="p-4">狀態</th><th className="p-4">匯款資訊</th><th className="p-4 text-right">操作</th></tr></thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {allMembers.flatMap(m => (m.orders || []).map(o => ({ ...o, memberId: m.id, memberName: m.name }))).sort((a, b) => new Date(b.date) - new Date(a.date)).map(order => (
-                            <tr key={order.orderId} className="hover:bg-slate-800/50">
-                              <td className="p-4 font-mono text-xs text-cyan-300">{order.orderId}</td>
-                              <td className="p-4">{order.shippingInfo?.name || order.memberName}</td>
-                              <td className="p-4 font-bold text-white">${order.totalAmount}</td>
-                              <td className="p-4">
-                                <span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-wider ${order.status === 'shipped' ? 'bg-green-500/20 text-green-400' : order.status === 'paid_confirmed' ? 'bg-blue-500/20 text-blue-400' : order.status === 'verifying' ? 'bg-purple-500/20 text-purple-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                  {order.status === 'shipped' ? 'Shipped' : order.status === 'paid_confirmed' ? 'Paid' : order.status === 'verifying' ? 'Verifying' : 'Pending'}
-                                </span>
-                              </td>
-                              <td className="p-4 text-xs font-mono text-yellow-400">{order.paymentInfo ? `後五碼: ${order.paymentInfo.last5}` : '-'}</td>
+                        <thead className="text-slate-500 border-b border-red-900/30 bg-red-950/10"><tr><th className="p-4">編號</th><th className="p-4">訂購人</th><th className="p-4">金額</th><th className="p-4">狀態</th><th className="p-4">匯款</th><th className="p-4 text-right">操作</th></tr></thead>
+                        <tbody className="divide-y divide-red-900/20">
+                          {allMembers.flatMap(m => (m.orders||[]).map(o => ({...o, memberId: m.id, memberName: m.name}))).sort((a,b)=>new Date(b.date)-new Date(a.date)).map(o => (
+                            <tr key={o.orderId} className="hover:bg-red-900/10">
+                              <td className="p-4 font-mono text-xs text-amber-500">{o.orderId}</td>
+                              <td className="p-4">{o.shippingInfo?.name || o.memberName}</td>
+                              <td className="p-4 font-bold text-white">${o.totalAmount}</td>
+                              <td className="p-4"><span className={`px-2 py-1 rounded-full text-[10px] uppercase tracking-wider ${o.status==='shipped'?'bg-green-500/20 text-green-400':o.status==='paid_confirmed'?'bg-blue-500/20 text-blue-400':o.status==='verifying'?'bg-purple-500/20 text-purple-400':'bg-yellow-500/20 text-yellow-400'}`}>{o.status}</span></td>
+                              <td className="p-4 text-xs font-mono text-slate-400">{o.paymentInfo?`後5: ${o.paymentInfo.last5}`:'-'}</td>
                               <td className="p-4 text-right flex justify-end gap-2">
-                                {order.status === 'verifying' && <button onClick={() => handleConfirmPayment(order.orderId, order.memberId)} className="text-blue-400 border border-blue-400 px-2 py-1 rounded text-xs hover:bg-blue-900/30">確認收款</button>}
-                                <button onClick={() => { setSelectedOrder({ ...order, memberId: order.memberId }); setShowOrderDetailModal(true); }} className="text-slate-400 hover:text-white text-xs border border-slate-600 px-3 py-1 rounded">Detail</button>
+                                {o.status==='verifying'&&<button onClick={()=>handleConfirmPayment(o.orderId,o.memberId)} className="text-blue-400 border border-blue-400 px-2 py-1 rounded text-xs">確認</button>}
+                                <button onClick={()=>{setSelectedOrder({...o, memberId:o.memberId});setShowOrderDetailModal(true)}} className="text-slate-400 hover:text-white text-xs border border-slate-600 px-3 py-1 rounded">Detail</button>
                               </td>
                             </tr>
                           ))}
@@ -627,196 +662,157 @@
                 {/* Admin: Support */}
                 {adminTab === 'support' && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden flex flex-col">
-                      <div className="p-4 bg-slate-800/50 font-bold border-b border-slate-700">對話列表</div>
+                    <div className="bg-[#1a0b0b] border border-red-900/30 rounded-2xl overflow-hidden flex flex-col">
+                      <div className="p-4 bg-red-950/20 font-bold border-b border-red-900/30">對話列表</div>
                       <div className="flex-1 overflow-y-auto">
-                        {allChats.map(chat => (
-                          <div key={chat.id} onClick={() => setAdminActiveChatId(chat.id)} className={`p-4 border-b border-slate-800 cursor-pointer hover:bg-slate-800 transition-colors ${adminActiveChatId === chat.id ? 'bg-slate-800 border-l-4 border-cyan-500' : ''}`}>
-                            <div className="font-bold text-white">{chat.name}</div>
-                            <div className="text-xs text-slate-500 truncate">{chat.lastMessage}</div>
+                        {allChats.map(c => (
+                          <div key={c.id} onClick={() => setAdminActiveChatId(c.id)} className={`p-4 border-b border-red-900/20 cursor-pointer hover:bg-red-900/20 ${adminActiveChatId===c.id?'bg-red-900/30 border-l-4 border-amber-500':''}`}>
+                            <div className="font-bold text-white">{c.name}</div><div className="text-xs text-slate-500 truncate">{c.lastMessage}</div>
                           </div>
                         ))}
                       </div>
                     </div>
-                    <div className="md:col-span-2 bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden flex flex-col">
+                    <div className="md:col-span-2 bg-[#1a0b0b] border border-red-900/30 rounded-2xl overflow-hidden flex flex-col">
                       {adminActiveChatId ? (
                         <>
-                          <div className="p-4 bg-slate-800/50 font-bold border-b border-slate-700">對話中</div>
-                          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/30">
-                            {chatMessages.map((msg, i) => (
-                              <div key={i} className={`flex ${msg.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[70%] p-3 rounded-xl text-sm ${msg.sender === 'admin' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-200'}`}>{msg.text}</div>
-                              </div>
-                            ))}
+                          <div className="p-4 bg-red-950/20 font-bold border-b border-red-900/30">對話中</div>
+                          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0F0505]/50">
+                            {chatMessages.map((msg, i) => (<div key={i} className={`flex ${msg.sender==='admin'?'justify-end':'justify-start'}`}><div className={`max-w-[70%] p-3 rounded-xl text-sm ${msg.sender==='admin'?'bg-red-600 text-white':'bg-slate-800 text-slate-200'}`}>{msg.text}</div></div>))}
                             <div ref={chatEndRef}></div>
                           </div>
-                          <div className="p-4 bg-slate-800/50 border-t border-slate-700 flex gap-2">
-                            <input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white outline-none" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage('admin')} />
-                            <button onClick={() => handleSendMessage('admin')} className="bg-cyan-600 text-white p-2 rounded-lg"><Send size={20}/></button>
-                          </div>
+                          <div className="p-4 bg-red-950/20 border-t border-red-900/30 flex gap-2"><input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white outline-none" value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleSendMessage('admin')} /><button onClick={()=>handleSendMessage('admin')} className="bg-red-600 text-white p-2 rounded-lg"><Send size={20}/></button></div>
                         </>
                       ) : <div className="flex-1 flex items-center justify-center text-slate-500">請選擇一個對話</div>}
                     </div>
                   </div>
                 )}
 
-                {/* Admin: News - FULLY RESTORED */}
+                {/* Admin: News */}
                 {adminTab === 'news' && (
-                  <div className="bg-slate-900 rounded-2xl border border-slate-700 p-6">
-                    <h3 className="font-bold text-lg text-white mb-6 flex items-center gap-2"><Megaphone className="text-cyan-400" /> 最新公告發布</h3>
-                    <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 mb-8">
-                      <div className="space-y-4">
-                        <input type="text" placeholder="公告標題" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newsForm.title} onChange={e => setNewsForm({...newsForm, title: e.target.value})} />
-                        <textarea placeholder="公告內容..." className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500 h-32" value={newsForm.content} onChange={e => setNewsForm({...newsForm, content: e.target.value})}></textarea>
-                        <button onClick={handlePublishNews} className="bg-cyan-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-cyan-500 transition-all shadow-lg">發布公告</button>
-                      </div>
+                  <div className="bg-[#1a0b0b] rounded-2xl border border-red-900/30 p-6">
+                    <h3 className="font-bold text-lg text-white mb-6 flex items-center gap-2"><Megaphone className="text-amber-400" /> 公告管理</h3>
+                    <div className="bg-red-950/10 p-6 rounded-xl border border-red-900/30 mb-8 space-y-4">
+                      <input type="text" placeholder="標題" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={newsForm.title} onChange={e=>setNewsForm({...newsForm,title:e.target.value})} />
+                      <textarea placeholder="內容..." className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500 h-32" value={newsForm.content} onChange={e=>setNewsForm({...newsForm,content:e.target.value})}></textarea>
+                      <button onClick={handlePublishNews} className="bg-red-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-red-500 shadow-lg">發布</button>
                     </div>
-                    <h4 className="font-bold text-white mb-4">已發布公告列表</h4>
                     <div className="space-y-3">
                       {newsList.map(item => (
-                        <div key={item.id} className="bg-slate-800/30 p-4 rounded-xl border border-slate-700 flex justify-between items-center group hover:border-cyan-500/30 transition-all">
-                          <div>
-                            <div className="font-bold text-white">{item.title}</div>
-                            <div className="text-slate-500 text-sm">{new Date(item.date).toLocaleDateString()}</div>
-                          </div>
-                          <button onClick={() => handleDeleteNews(item.id)} className="text-slate-600 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18} /></button>
+                        <div key={item.id} className="bg-red-950/10 p-4 rounded-xl border border-red-900/30 flex justify-between items-center group">
+                          <div><div className="font-bold text-white">{item.title}</div><div className="text-slate-500 text-sm">{new Date(item.date).toLocaleDateString()}</div></div>
+                          <button onClick={() => handleDeleteNews(item.id)} className="text-slate-600 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100"><Trash2 size={18} /></button>
                         </div>
                       ))}
-                      {newsList.length === 0 && <div className="text-center text-slate-500 py-4">目前沒有公告</div>}
                     </div>
                   </div>
                 )}
 
-                {/* Admin: Settings - FULLY RESTORED */}
+                {/* Admin: Settings */}
                 {adminTab === 'settings' && (
-                  <div className="bg-slate-900 rounded-2xl border border-slate-700 p-8">
-                    <h3 className="font-bold text-lg text-white mb-6 flex items-center gap-2"><Settings className="text-cyan-400" /> 全域折扣規則</h3>
+                  <div className="bg-[#1a0b0b] rounded-2xl border border-red-900/30 p-8">
+                    <h3 className="font-bold text-lg text-white mb-6 flex items-center gap-2"><Settings className="text-amber-400" /> 折扣規則</h3>
                     <div className="space-y-4 mb-6">
-                      {(tempRules.length === 0 ? discountRules : tempRules).map((rule, idx) => (
-                        <div key={idx} className="flex gap-2 items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700">
-                          <input type="number" className="p-2 bg-slate-900 border border-slate-600 rounded text-white w-24 text-center focus:border-cyan-500 outline-none" value={rule.points} onChange={e => { const newRules = [...(tempRules.length ? tempRules : discountRules)]; newRules[idx] = { ...newRules[idx], points: Number(e.target.value) }; setTempRules(newRules); }} />
+                      {tempRules.map((rule, idx) => (
+                        <div key={idx} className="flex gap-2 items-center bg-red-950/10 p-3 rounded-xl border border-red-900/30">
+                          <input type="number" className="p-2 bg-[#0F0505] border border-slate-600 rounded text-white w-24 text-center" value={rule.points} onChange={e => { const n=[...tempRules]; n[idx].points=Number(e.target.value); setTempRules(n); }} />
                           <span className="text-slate-500 text-sm">點以上</span>
-                          <input type="number" step="0.1" className="p-2 bg-slate-900 border border-slate-600 rounded text-white w-20 text-center focus:border-cyan-500 outline-none" value={rule.rate} onChange={e => { const newRules = [...(tempRules.length ? tempRules : discountRules)]; newRules[idx] = { ...newRules[idx], rate: Number(e.target.value) }; setTempRules(newRules); }} />
-                          <input type="text" className="p-2 bg-slate-900 border border-slate-600 rounded text-white flex-1 focus:border-cyan-500 outline-none" value={rule.label} onChange={e => { const newRules = [...(tempRules.length ? tempRules : discountRules)]; newRules[idx] = { ...newRules[idx], label: e.target.value }; setTempRules(newRules); }} />
-                          <button onClick={() => { const newRules = (tempRules.length ? tempRules : discountRules).filter((_, i) => i !== idx); setTempRules(newRules); }} className="text-slate-500 hover:text-red-400 p-2"><X size={18} /></button>
+                          <input type="number" step="0.1" className="p-2 bg-[#0F0505] border border-slate-600 rounded text-white w-20 text-center" value={rule.rate} onChange={e => { const n=[...tempRules]; n[idx].rate=Number(e.target.value); setTempRules(n); }} />
+                          <input type="text" className="p-2 bg-[#0F0505] border border-slate-600 rounded text-white flex-1" value={rule.label} onChange={e => { const n=[...tempRules]; n[idx].label=e.target.value; setTempRules(n); }} />
+                          <button onClick={() => setTempRules(tempRules.filter((_,i)=>i!==idx))} className="text-slate-500 hover:text-red-400 p-2"><X size={18}/></button>
                         </div>
                       ))}
-                      <button onClick={() => setTempRules([...(tempRules.length ? tempRules : discountRules), { points: 0, rate: 0.9, label: '新規則' }])} className="text-cyan-400 text-sm flex items-center gap-1 hover:text-cyan-300 mt-2"><Plus size={16} /> 新增規則條件</button>
+                      <button onClick={() => setTempRules([...tempRules, {points:0,rate:0.9,label:'新規則'}])} className="text-amber-400 text-sm flex items-center gap-1 mt-2"><Plus size={16}/> 新增規則</button>
                     </div>
-                    <button onClick={handleSaveRules} className="bg-cyan-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-cyan-500 shadow-lg shadow-cyan-500/20"><Save size={18} /> 儲存設定</button>
+                    <button onClick={handleSaveRules} className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-red-500"><Save size={18}/> 儲存</button>
                   </div>
                 )}
               </div>
             )}
           </main>
 
-          {/* User Floating Chat Widget & All Modals from previous steps ... (Chat, Payment, News, Buy, Product, AddMember, Point, OrderDetail) */}
-          {/* ... (為了節省篇幅，此處省略與 V3.0 相同的 Modal 程式碼，但實際運作時請務必包含所有 Modal 的區塊) ... */}
-          
-          {/* Chat Widget */}
-          {!isAdmin && view !== 'login' && view !== 'signup' && (
+          {/* Cart Sidebar */}
+          {showCart && (
+            <div className="fixed inset-0 z-50 flex justify-end">
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCart(false)}></div>
+              <div className="relative w-full max-w-md bg-[#1a0b0b] border-l border-red-900/50 h-full shadow-2xl p-6 flex flex-col cart-enter">
+                <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-bold text-white flex items-center gap-2"><ShoppingCart/> 購物車</h3><button onClick={()=>setShowCart(false)}><X className="text-slate-400 hover:text-white"/></button></div>
+                <div className="flex-1 overflow-y-auto space-y-4">
+                  {cart.length > 0 ? cart.map(item => (
+                    <div key={item.id} className="bg-red-950/10 p-4 rounded-xl border border-red-900/30 flex gap-4">
+                      <img src={item.image} className="w-16 h-16 rounded-lg object-cover" />
+                      <div className="flex-1">
+                        <div className="font-bold text-white">{item.name}</div><div className="text-sm text-amber-400">${item.price}</div>
+                        <div className="flex items-center gap-3 mt-2"><button onClick={() => updateCartQty(item.id, -1)} className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-white hover:bg-slate-700"><Minus size={14}/></button><span className="text-sm text-white font-mono w-4 text-center">{item.quantity}</span><button onClick={() => updateCartQty(item.id, 1)} className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-white hover:bg-slate-700"><Plus size={14}/></button></div>
+                      </div>
+                      <button onClick={() => removeFromCart(item.id)} className="text-slate-500 hover:text-red-400 self-start"><Trash2 size={18}/></button>
+                    </div>
+                  )) : <div className="text-center text-slate-500 py-20">購物車是空的</div>}
+                </div>
+                {cart.length > 0 && (
+                  <div className="border-t border-red-900/30 pt-4 mt-4">
+                    <div className="flex justify-between text-sm text-slate-400 mb-2"><span>小計</span><span>${cartTotal}</span></div>
+                    <div className="flex justify-between text-sm text-green-400 mb-4"><span>折扣 ({discountInfo.label})</span><span>{Math.round((1 - discountInfo.rate) * 100)}% OFF</span></div>
+                    <div className="flex justify-between text-xl font-bold text-white mb-6"><span>總金額</span><span>${finalTotal}</span></div>
+                    <button onClick={handleCheckout} className="w-full bg-gradient-to-r from-red-600 to-orange-600 text-white py-3 rounded-xl font-bold hover:shadow-lg">前往結帳</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* User Chat */}
+          {!isAdmin && view!=='login' && view!=='signup' && (
             <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
               {chatOpen && (
-                <div className="mb-4 w-80 h-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden chat-enter">
-                  <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center"><h3 className="font-bold text-white flex items-center gap-2"><MessageSquare size={18} className="text-cyan-400"/> 線上客服</h3><button onClick={() => setChatOpen(false)}><X size={18} className="text-slate-400 hover:text-white"/></button></div>
+                <div className="mb-4 w-80 h-96 bg-[#1a0b0b] border border-red-900/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden chat-enter">
+                  <div className="p-4 bg-red-950/30 border-b border-red-900/30 flex justify-between items-center"><h3 className="font-bold text-white flex items-center gap-2"><MessageSquare size={18} className="text-amber-400"/> 線上客服</h3><button onClick={() => setChatOpen(false)}><X size={18} className="text-slate-400 hover:text-white"/></button></div>
                   <div className="bg-green-900/30 p-2 text-center border-b border-green-800/50"><p className="text-xs text-green-200 mb-1">需要傳送匯款單或圖片？</p><a href={`https://line.me/R/ti/p/@${LINE_ID}`} target="_blank" className="inline-flex items-center gap-1 bg-[#06C755] text-white text-xs px-3 py-1 rounded-full font-bold hover:bg-[#05b34c] transition-colors"><MessageCircle size={14} fill="currentColor" /> 加入 LINE@ 官方帳號 <ExternalLink size={10} /></a></div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/50">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0F0505]/50">
                     <div className="flex justify-start"><div className="max-w-[80%] p-3 rounded-xl text-sm bg-slate-800 text-slate-300">您好！有什麼我們可以幫您的嗎？</div></div>
-                    {chatMessages.map((msg, i) => (<div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[80%] p-3 rounded-xl text-sm ${msg.sender === 'user' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-300'}`}>{msg.text}</div></div>))}
+                    {chatMessages.map((msg, i) => (<div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[80%] p-3 rounded-xl text-sm ${msg.sender === 'user' ? 'bg-red-700 text-white' : 'bg-slate-800 text-slate-300'}`}>{msg.text}</div></div>))}
                     <div ref={chatEndRef}></div>
                   </div>
-                  <div className="p-3 bg-slate-800 border-t border-slate-700 flex gap-2"><input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-cyan-500" placeholder="輸入訊息..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage('user')} /><button onClick={() => handleSendMessage('user')} className="bg-cyan-600 text-white p-2 rounded-lg hover:bg-cyan-500"><Send size={18}/></button></div>
+                  <div className="p-3 bg-red-950/30 border-t border-red-900/30 flex gap-2"><input type="text" className="flex-1 bg-[#0F0505] border border-red-900/50 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-500" placeholder="輸入訊息..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage('user')} /><button onClick={() => handleSendMessage('user')} className="bg-red-600 text-white p-2 rounded-lg hover:bg-red-500"><Send size={18}/></button></div>
                 </div>
               )}
-              <button onClick={() => setChatOpen(!chatOpen)} className="bg-cyan-600 hover:bg-cyan-500 text-white p-4 rounded-full shadow-lg shadow-cyan-500/30 transition-all hover:scale-110">{chatOpen ? <X size={24} /> : <MessageCircle size={24} />}</button>
+              <button onClick={() => setChatOpen(!chatOpen)} className="bg-gradient-to-r from-red-600 to-orange-600 text-white p-4 rounded-full shadow-lg shadow-red-500/30 transition-all hover:scale-110">{chatOpen ? <X size={24} /> : <MessageCircle size={24} />}</button>
             </div>
           )}
 
-          {/* Payment Report Modal */}
-          {showPaymentModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl"><h3 className="font-bold text-xl text-white mb-4">回報匯款資訊</h3><div className="space-y-4"><div className="p-3 bg-yellow-900/20 border border-yellow-700/30 rounded text-sm text-yellow-200">訂單編號: <span className="font-mono">{paymentForm.orderId}</span></div><div><label className="text-sm text-slate-400 mb-1 block">匯款日期</label><input type="date" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={paymentForm.date} onChange={e => setPaymentForm({...paymentForm, date: e.target.value})} /></div><div><label className="text-sm text-slate-400 mb-1 block">帳號後五碼</label><input type="text" maxLength="5" placeholder="例如: 12345" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500 font-mono text-lg tracking-widest" value={paymentForm.last5} onChange={e => setPaymentForm({...paymentForm, last5: e.target.value})} /></div></div><div className="flex gap-2 mt-6"><button onClick={() => setShowPaymentModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-2 rounded hover:bg-slate-800">取消</button><button onClick={handleReportPayment} className="flex-1 bg-cyan-600 text-white p-2 rounded font-bold hover:bg-cyan-500">送出回報</button></div></div></div>}
-
-          {/* News Modal */}
-          {showNewsModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[80vh] flex flex-col"><div className="flex justify-between items-center mb-6"><h3 className="font-bold text-xl text-white flex items-center gap-2"><Megaphone className="text-cyan-400" /> 最新公告</h3><button onClick={() => setShowNewsModal(false)} className="text-slate-500 hover:text-white"><X size={20}/></button></div><div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">{newsList.length > 0 ? newsList.map(item => (<div key={item.id} className="bg-slate-800/50 p-5 rounded-xl border border-slate-700 hover:border-cyan-500/30 transition-all"><div className="flex justify-between items-start mb-2"><h4 className="font-bold text-white text-lg">{item.title}</h4><span className="text-xs text-slate-500 bg-slate-900 px-2 py-1 rounded-full">{new Date(item.date).toLocaleDateString()}</span></div><p className="text-slate-300 text-sm whitespace-pre-wrap leading-relaxed">{item.content}</p></div>)) : <div className="text-center py-10 text-slate-500"><Info className="mx-auto mb-2 opacity-50" size={32} />目前沒有最新公告</div>}</div></div></div>}
-
-          {/* Admin Add Member Modal */}
-          {showAddMemberModal && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
-                <h3 className="font-bold text-xl text-white mb-4">手動新增會員</h3>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3"><input type="text" placeholder="姓名" className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} /><input type="text" placeholder="電話" className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} /></div>
-                  <input type="email" placeholder="Email" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} />
-                  <div className="grid grid-cols-2 gap-3"><input type="date" className="p-3 bg-slate-950 border border-slate-700 rounded text-slate-400 outline-none focus:border-cyan-500" value={newMember.birthday} onChange={e => setNewMember({...newMember, birthday: e.target.value})} /><input type="text" placeholder="地址" className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.address} onChange={e => setNewMember({...newMember, address: e.target.value})} /></div>
-                  <div className="grid grid-cols-2 gap-3"><input type="number" placeholder="初始點數" className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.points} onChange={e => setNewMember({...newMember, points: e.target.value})} /><select className="p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={newMember.level} onChange={e => setNewMember({...newMember, level: e.target.value})}><option>一般會員</option><option>黃金會員</option><option>白金會員</option></select></div>
+          {/* Config Error Modal */}
+          {showAuthErrorModal && (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[999] flex items-center justify-center p-6">
+              <div className="bg-[#1a0b0b] border border-red-500 rounded-2xl w-full max-w-lg p-8 shadow-2xl relative">
+                <button onClick={() => setShowAuthErrorModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X size={24} /></button>
+                <div className="flex flex-col items-center text-center mb-6">
+                  <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center border border-red-500/50 mb-4 animate-pulse"><AlertTriangle size={32} className="text-red-500" /></div>
+                  <h3 className="text-2xl font-bold text-white">權限未開啟</h3>
+                  <p className="text-red-400 mt-2 font-bold">Error: auth/operation-not-allowed</p>
                 </div>
-                <div className="flex gap-2 mt-6"><button onClick={() => setShowAddMemberModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-2 rounded hover:bg-slate-800">取消</button><button onClick={handleAdminAddMember} className="flex-1 bg-cyan-600 text-white p-2 rounded font-bold hover:bg-cyan-500">確認新增</button></div>
-              </div>
-            </div>
-          )}
-
-          {/* Product Modal */}
-          {showProductModal && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                <h3 className="font-bold text-xl text-white mb-4">{editingProduct ? '編輯商品' : '新增商品'}</h3>
-                <div className="space-y-3">
-                  <input type="text" placeholder="商品名稱" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
-                  <input type="number" placeholder="價格" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} />
-                  <input type="text" placeholder="描述" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={productForm.desc} onChange={e => setProductForm({...productForm, desc: e.target.value})} />
-                  <input type="text" placeholder="圖片網址" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={productForm.image} onChange={e => setProductForm({...productForm, image: e.target.value})} />
+                <div className="bg-[#0F0505] p-6 rounded-xl border border-red-900/50 text-left text-sm text-slate-300 space-y-4">
+                  <p className="font-bold text-white">這是 Firebase 的安全機制，請依照以下步驟開啟權限：</p>
+                  <ol className="list-decimal pl-5 space-y-2">
+                    <li>前往 <a href="https://console.firebase.google.com/" target="_blank" className="text-amber-400 hover:underline">Firebase Console</a>。</li>
+                    <li>點擊左側選單的 <strong>Build</strong> &gt; <strong>Authentication</strong>。</li>
+                    <li>切換到 <strong>Sign-in method</strong> 分頁。</li>
+                    <li>找到 <strong>Email/Password</strong>，點擊鉛筆圖示編輯。</li>
+                    <li>將 <strong>Enable</strong> 開關打開，然後點擊儲存。</li>
+                  </ol>
+                  <p className="text-xs text-slate-500 mt-4 border-t border-slate-800 pt-2">如果您使用的是網頁內建的預覽環境，請注意：預覽環境通常無法開啟此權限。請下載 index.html 並填入您自己的 Firebase Config 來執行。</p>
                 </div>
-                <div className="flex gap-2 mt-6"><button onClick={() => setShowProductModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-2 rounded hover:bg-slate-800">取消</button><button onClick={handleSaveProduct} className="flex-1 bg-cyan-600 text-white p-2 rounded font-bold hover:bg-cyan-500">儲存</button></div>
+                <button onClick={() => setShowAuthErrorModal(false)} className="w-full bg-red-800 hover:bg-red-700 text-white py-3 rounded-xl font-bold mt-6">我了解了</button>
               </div>
             </div>
           )}
 
-          {/* Point Modal */}
-          {showPointModal && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl"></div>
-                <h3 className="font-bold text-xl text-white mb-1">點數調整</h3>
-                <p className="text-slate-500 text-sm mb-6">對象: {pointForm.memberName}</p>
-                <div className="space-y-4">
-                  <div><label className="text-xs text-slate-400 mb-1 block">變動理由</label><input type="text" placeholder="例如: 購買回饋, 生日禮金" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-white outline-none focus:border-cyan-500" value={pointForm.reason} onChange={e => setPointForm({...pointForm, reason: e.target.value})} /></div>
-                  <div><label className="text-xs text-slate-400 mb-1 block">點數增減 (負數為扣除)</label><input type="number" className="w-full p-3 bg-slate-950 border border-slate-700 rounded text-cyan-400 font-mono text-xl outline-none focus:border-cyan-500" value={pointForm.amount} onChange={e => setPointForm({...pointForm, amount: e.target.value})} /></div>
-                </div>
-                <div className="flex gap-2 mt-6"><button onClick={() => setShowPointModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-3 rounded-xl hover:bg-slate-800">取消</button><button onClick={handlePointAdjustment} className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 text-white p-3 rounded-xl font-bold hover:shadow-lg hover:shadow-cyan-500/30">確認調整</button></div>
-              </div>
-            </div>
-          )}
-
-          {/* Buy Modal */}
-          {showBuyModal && buyForm.product && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                <h3 className="font-bold text-xl text-white mb-6 text-center">確認訂購</h3>
-                <div className="flex gap-4 mb-6 items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700"><img src={buyForm.product.image} className="w-16 h-16 rounded object-cover" /><div><div className="font-bold text-white">{buyForm.product.name}</div><div className="text-sm text-slate-400">${buyForm.product.price} / 單位</div></div></div>
-                <div className="flex justify-between items-center mb-6 px-2"><span className="text-slate-400">數量</span><div className="flex items-center gap-3"><button onClick={() => setBuyForm({...buyForm, quantity: Math.max(1, buyForm.quantity - 1)})} className="w-8 h-8 rounded-full border border-slate-600 text-slate-300 hover:bg-slate-700">-</button><span className="font-bold text-white w-6 text-center">{buyForm.quantity}</span><button onClick={() => setBuyForm({...buyForm, quantity: buyForm.quantity + 1})} className="w-8 h-8 rounded-full border border-slate-600 text-slate-300 hover:bg-slate-700">+</button></div></div>
-                <div className="border-t border-slate-700 pt-4"><div className="flex justify-between text-sm mb-1 text-slate-400"><span>折扣 ({getDiscountInfo(memberData.points).label})</span><span className="text-green-400 font-bold">{Math.round((1 - getDiscountInfo(memberData.points).rate) * 100)}% OFF</span></div><div className="flex justify-between items-end mt-2"><span className="font-bold text-white">總金額</span><span className="text-3xl font-black text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">${Math.round(buyForm.product.price * getDiscountInfo(memberData.points).rate) * buyForm.quantity}</span></div></div>
-                <div className="mt-6 bg-yellow-900/20 border border-yellow-700/30 p-3 rounded text-xs text-yellow-200/70"><span className="font-bold text-yellow-500">配送至:</span> {memberData.address} <br/> ({memberData.name} / {memberData.phone})</div>
-                <div className="flex gap-3 mt-6"><button onClick={() => setShowBuyModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-3 rounded-xl hover:bg-slate-800 font-bold">取消</button><button onClick={handlePlaceOrder} className="flex-1 bg-cyan-600 text-white p-3 rounded-xl font-bold hover:bg-cyan-500 shadow-lg shadow-cyan-500/20">確認送出</button></div>
-              </div>
-            </div>
-          )}
-
-          {/* Order Detail Modal */}
+          {/* Modals */}
+          {showPaymentModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-[#1a0b0b] border border-red-900/50 rounded-2xl w-full max-w-md p-6 shadow-2xl"><h3 className="font-bold text-xl text-white mb-4">回報匯款資訊</h3><div className="space-y-4"><div className="p-3 bg-yellow-900/20 border border-yellow-700/30 rounded text-sm text-yellow-200">訂單編號: <span className="font-mono">{paymentForm.orderId}</span></div><div><label className="text-sm text-slate-400 mb-1 block">匯款日期</label><input type="date" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={paymentForm.date} onChange={e => setPaymentForm({...paymentForm, date: e.target.value})} /></div><div><label className="text-sm text-slate-400 mb-1 block">帳號後五碼</label><input type="text" maxLength="5" placeholder="例如: 12345" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500 font-mono text-lg tracking-widest" value={paymentForm.last5} onChange={e => setPaymentForm({...paymentForm, last5: e.target.value})} /></div></div><div className="flex gap-2 mt-6"><button onClick={() => setShowPaymentModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-2 rounded hover:bg-slate-800">取消</button><button onClick={handleReportPayment} className="flex-1 bg-red-600 text-white p-2 rounded font-bold hover:bg-red-500">送出回報</button></div></div></div>}
+          {showNewsModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-[#1a0b0b] border border-red-900/50 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative max-h-[80vh] flex flex-col"><div className="flex justify-between items-center mb-6"><h3 className="font-bold text-xl text-white flex items-center gap-2"><Megaphone className="text-amber-400" /> 最新公告</h3><button onClick={() => setShowNewsModal(false)} className="text-slate-500 hover:text-white"><X size={20}/></button></div><div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">{newsList.length > 0 ? newsList.map(item => (<div key={item.id} className="bg-red-950/10 p-5 rounded-xl border border-red-900/30 hover:border-amber-500/30 transition-all"><div className="flex justify-between items-start mb-2"><h4 className="font-bold text-white text-lg">{item.title}</h4><span className="text-xs text-slate-500 bg-[#0F0505] px-2 py-1 rounded-full">{new Date(item.date).toLocaleDateString()}</span></div><p className="text-slate-300 text-sm whitespace-pre-wrap leading-relaxed">{item.content}</p></div>)) : <div className="text-center py-10 text-slate-500"><Info className="mx-auto mb-2 opacity-50" size={32} />目前沒有最新公告</div>}</div></div></div>}
+          {showAddMemberModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-[#1a0b0b] border border-red-900/50 rounded-2xl w-full max-w-lg p-6 shadow-2xl overflow-y-auto max-h-[90vh]"><h3 className="font-bold text-xl text-white mb-4">手動新增會員</h3><div className="space-y-3"><div className="grid grid-cols-2 gap-3"><input type="text" placeholder="姓名" className="p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} /><input type="text" placeholder="電話" className="p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} /></div><input type="email" placeholder="Email" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} /><div className="grid grid-cols-2 gap-3"><input type="date" className="p-3 bg-[#0F0505] border border-red-900/50 rounded text-slate-400 outline-none focus:border-amber-500" value={newMember.birthday} onChange={e => setNewMember({...newMember, birthday: e.target.value})} /><input type="text" placeholder="地址" className="p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={newMember.address} onChange={e => setNewMember({...newMember, address: e.target.value})} /></div><div className="grid grid-cols-2 gap-3"><input type="number" placeholder="初始點數" className="p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={newMember.points} onChange={e => setNewMember({...newMember, points: e.target.value})} /><select className="p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={newMember.level} onChange={e => setNewMember({...newMember, level: e.target.value})}><option>一般會員</option><option>黃金會員</option><option>白金會員</option></select></div></div><div className="flex gap-2 mt-6"><button onClick={() => setShowAddMemberModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-2 rounded hover:bg-slate-800">取消</button><button onClick={handleAdminAddMember} className="flex-1 bg-red-600 text-white p-2 rounded font-bold hover:bg-red-500">確認新增</button></div></div></div>}
+          {showProductModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-[#1a0b0b] border border-red-900/50 rounded-2xl w-full max-w-md p-6 shadow-2xl"><h3 className="font-bold text-xl text-white mb-4">{editingProduct ? '編輯商品' : '新增商品'}</h3><div className="space-y-3"><input type="text" placeholder="商品名稱" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} /><input type="number" placeholder="價格" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={productForm.price} onChange={e => setProductForm({...productForm, price: e.target.value})} /><input type="text" placeholder="描述" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={productForm.desc} onChange={e => setProductForm({...productForm, desc: e.target.value})} /><input type="text" placeholder="圖片網址" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={productForm.image} onChange={e => setProductForm({...productForm, image: e.target.value})} /></div><div className="flex gap-2 mt-6"><button onClick={() => setShowProductModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-2 rounded hover:bg-slate-800">取消</button><button onClick={handleSaveProduct} className="flex-1 bg-red-600 text-white p-2 rounded font-bold hover:bg-red-500">儲存</button></div></div></div>}
+          {showPointModal && <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-[#1a0b0b] border border-red-900/50 rounded-2xl w-full max-w-md p-6 shadow-2xl"><h3 className="font-bold text-xl text-white mb-1">點數調整</h3><p className="text-slate-500 text-sm mb-6">對象: {pointForm.memberName}</p><div className="space-y-4"><div><label className="text-xs text-slate-400 mb-1 block">變動理由</label><input type="text" placeholder="例如: 購買回饋, 生日禮金" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-white outline-none focus:border-amber-500" value={pointForm.reason} onChange={e => setPointForm({...pointForm, reason: e.target.value})} /></div><div><label className="text-xs text-slate-400 mb-1 block">點數增減 (負數為扣除)</label><input type="number" className="w-full p-3 bg-[#0F0505] border border-red-900/50 rounded text-cyan-400 font-mono text-xl outline-none focus:border-amber-500" value={pointForm.amount} onChange={e => setPointForm({...pointForm, amount: e.target.value})} /></div></div><div className="flex gap-2 mt-6"><button onClick={() => setShowPointModal(false)} className="flex-1 border border-slate-600 text-slate-300 p-3 rounded-xl hover:bg-slate-800">取消</button><button onClick={handlePointAdj} className="flex-1 bg-gradient-to-r from-red-600 to-orange-600 text-white p-3 rounded-xl font-bold hover:shadow-lg">確認調整</button></div></div></div>}
           {showOrderDetailModal && selectedOrder && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-8 shadow-2xl relative">
-                <div className="flex justify-between items-start mb-6"><div><h3 className="text-xl font-bold flex items-center gap-2 text-white"><Package className="text-purple-400" /> 訂單詳情</h3><span className="text-sm text-slate-500 font-mono">{selectedOrder.orderId}</span></div><button onClick={() => setShowOrderDetailModal(false)} className="text-slate-500 hover:text-white"><X /></button></div>
-                <div className="bg-slate-800/50 border border-slate-700 p-4 rounded-xl mb-6 space-y-2 text-sm text-slate-300">
-                  <div className="font-bold text-slate-200 border-b border-slate-700 pb-2 mb-2">收件人資料</div>
-                  <div className="grid grid-cols-[60px_1fr] gap-2"><span className="text-slate-500">姓名:</span> <span className="text-white">{selectedOrder.shippingInfo?.name || selectedOrder.memberName}</span><span className="text-slate-500">電話:</span> <span className="text-white">{selectedOrder.shippingInfo?.phone}</span><span className="text-slate-500">地址:</span> <span className="text-white">{selectedOrder.shippingInfo?.address}</span></div>
-                  {selectedOrder.paymentInfo && <div className="mt-4 pt-2 border-t border-slate-700"><div className="text-yellow-400 font-bold mb-1">匯款資訊</div><div>後五碼: {selectedOrder.paymentInfo.last5}</div><div>日期: {selectedOrder.paymentInfo.date}</div></div>}
-                </div>
-                <div className="space-y-3 mb-8">{selectedOrder.items.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-sm border-b border-slate-800 pb-2 text-slate-300"><div><div className="font-bold text-white">{item.name}</div><div className="text-xs text-slate-500">${item.unitPrice} x {item.quantity} (Rate: {item.discountRate})</div></div><div className="font-bold text-white">${Math.round(item.unitPrice * item.discountRate * item.quantity)}</div></div>))}<div className="flex justify-between items-center text-lg font-black pt-2"><span className="text-white">Total</span><span className="text-cyan-400 text-2xl">${selectedOrder.totalAmount}</span></div></div>
-                <div className="flex gap-3">
-                  {isAdmin && selectedOrder.status === 'verifying' && <button onClick={() => { handleConfirmPayment(selectedOrder.orderId, selectedOrder.memberId); setShowOrderDetailModal(false); }} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-bold">確認收款</button>}
-                  {selectedOrder.status !== 'shipped' ? <button onClick={() => { handleUpdateOrderStatus(selectedOrder.memberId, selectedOrder.orderId, 'shipped'); setShowOrderDetailModal(false); }} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(34,197,94,0.3)]"><Truck size={18} /> 標記為已出貨</button> : <div className="flex-1 bg-slate-800 border border-slate-700 text-slate-500 py-3 rounded-xl font-bold flex justify-center items-center gap-2 cursor-not-allowed"><CheckCircle size={18} /> 訂單已完成</div>}
-                </div>
-              </div>
-            </div>
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-[#1a0b0b] border border-red-900/50 rounded-2xl w-full max-w-lg p-8 shadow-2xl relative"><div className="flex justify-between items-start mb-6"><div><h3 className="text-xl font-bold flex items-center gap-2 text-white"><Package className="text-amber-400" /> 訂單詳情</h3><span className="text-sm text-slate-500 font-mono">{selectedOrder.orderId}</span></div><button onClick={() => setShowOrderDetailModal(false)} className="text-slate-500 hover:text-white"><X /></button></div><div className="bg-red-950/10 border border-red-900/30 p-4 rounded-xl mb-6 space-y-2 text-sm text-slate-300"><div className="font-bold text-slate-200 border-b border-red-900/30 pb-2 mb-2">收件人資料</div><div className="grid grid-cols-[60px_1fr] gap-2"><span className="text-slate-500">姓名:</span> <span className="text-white">{selectedOrder.shippingInfo?.name || selectedOrder.memberName}</span><span className="text-slate-500">電話:</span> <span className="text-white">{selectedOrder.shippingInfo?.phone}</span><span className="text-slate-500">地址:</span> <span className="text-white">{selectedOrder.shippingInfo?.address}</span></div>{selectedOrder.paymentInfo && <div className="mt-4 pt-2 border-t border-red-900/30"><div className="text-yellow-400 font-bold mb-1">匯款資訊</div><div>後五碼: {selectedOrder.paymentInfo.last5}</div><div>日期: {selectedOrder.paymentInfo.date}</div></div>}</div><div className="space-y-3 mb-8">{selectedOrder.items.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-sm border-b border-red-900/30 pb-2 text-slate-300"><div><div className="font-bold text-white">{item.name}</div><div className="text-xs text-slate-500">${item.unitPrice} x {item.quantity} (Rate: {item.discountRate})</div></div><div className="font-bold text-white">${Math.round(item.unitPrice * item.discountRate * item.quantity)}</div></div>))}<div className="flex justify-between items-center text-lg font-black pt-2"><span className="text-white">Total</span><span className="text-amber-400 text-2xl">${selectedOrder.totalAmount}</span></div></div><div className="flex gap-3">{isAdmin && selectedOrder.status === 'verifying' && <button onClick={() => { handleConfirmPayment(selectedOrder.orderId, selectedOrder.memberId); setShowOrderDetailModal(false); }} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-bold">確認收款</button>}{selectedOrder.status !== 'shipped' ? <button onClick={() => { handleUpdateOrderStatus(selectedOrder.memberId, selectedOrder.orderId, 'shipped'); setShowOrderDetailModal(false); }} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(34,197,94,0.3)]"><Truck size={18} /> 標記為已出貨</button> : <div className="flex-1 bg-slate-800 border border-slate-700 text-slate-500 py-3 rounded-xl font-bold flex justify-center items-center gap-2 cursor-not-allowed"><CheckCircle size={18} /> 訂單已完成</div>}</div></div></div>
           )}
         </div>
       );
