@@ -55,7 +55,27 @@
   </style>
 </head>
 <body class="min-h-screen relative">
+  
+  <!-- 載入中畫面 -->
+  <div id="loading-screen" class="fixed inset-0 flex flex-col items-center justify-center bg-[#0F0505] text-red-500 z-[9999]">
+    <div class="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+    <h2 class="text-xl font-bold text-white tracking-widest">MUYUN SYSTEM</h2>
+    <p class="text-sm text-slate-500 mt-2">系統啟動中...</p>
+    <div id="error-display" class="mt-4 p-4 bg-red-900/20 text-red-400 text-xs hidden border border-red-800 rounded"></div>
+  </div>
+
   <div id="root"></div>
+
+  <script>
+    // 全局錯誤捕捉
+    window.onerror = function(message, source, lineno, colno, error) {
+      const display = document.getElementById('error-display');
+      if(display) {
+        display.style.display = 'block';
+        display.innerText = `發生錯誤: ${message}\n位置: ${source}:${lineno}`;
+      }
+    };
+  </script>
 
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useRef } from 'react';
@@ -89,9 +109,11 @@
 
     if (typeof __firebase_config !== 'undefined') {
       try {
-        // 如果是在預覽環境，可能會覆蓋掉，但在本地開啟 index.html 時會使用上面的設定
-        // 為了避免衝突，我們可以優先使用手動填寫的設定
-        // firebaseConfig = JSON.parse(__firebase_config); 
+        const envConfig = JSON.parse(__firebase_config);
+        // 如果環境變數有值，且不是預設值，才覆蓋
+        if(envConfig && envConfig.apiKey && !envConfig.apiKey.includes("YOUR_API_KEY")) {
+            firebaseConfig = envConfig;
+        }
         if (typeof __app_id !== 'undefined') currentAppId = __app_id;
         if (typeof __initial_auth_token !== 'undefined') initialAuthToken = __initial_auth_token;
       } catch (e) { console.warn("使用手動設定模式"); }
@@ -109,11 +131,20 @@
         auth = getAuth(app);
         db = getFirestore(app);
       }
-    } catch (e) { isConfigured = false; }
+    } catch (e) { 
+      console.error("Firebase 初始化失敗:", e);
+      isConfigured = false; 
+    }
+
+    // 移除載入畫面
+    setTimeout(() => {
+        const loader = document.getElementById('loading-screen');
+        if(loader) loader.style.display = 'none';
+    }, 1000);
 
     const DEFAULT_PRODUCTS = [
-      { id: 'p1', name: '量子修復納豆激酶', price: 1800, desc: '奈米級吸收技術，啟動代謝循環', image: 'https://images.unsplash.com/photo-1615485925763-867862f80d29?auto=format&fit=crop&q=80&w=400' },
-      { id: 'p2', name: '光子嫩膚眼膠', price: 1200, desc: '生物光波傳導，重現明亮雙眸', image: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&q=80&w=400' }
+      { id: 'p1', name: '量子修復納豆激酶', price: 1800, desc: '奈米級吸收技術，啟動代謝循環', origin: '日本', spec: '60粒/瓶', usage: '每日2粒', image: 'https://images.unsplash.com/photo-1615485925763-867862f80d29?auto=format&fit=crop&q=80&w=400' },
+      { id: 'p2', name: '光子嫩膚眼膠', price: 1200, desc: '生物光波傳導，重現明亮雙眸', origin: '台灣', spec: '30ml', usage: '早晚各一次', image: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&q=80&w=400' }
     ];
 
     const DEFAULT_RULES = [
@@ -121,7 +152,8 @@
       { points: 1000, rate: 0.8, label: "VIP 金卡 8折" }
     ];
 
-    const CLOUD_LOGO_URL = "https://cdn-icons-png.flaticon.com/512/1163/1163736.png"; 
+    // 更新：雲朵照片 Logo (GitHub 連結)
+    const CLOUD_LOGO_URL = "https://raw.githubusercontent.com/arise1221/muyun/refs/heads/main/muyun-logo.psd.png";
 
     const App = () => {
       // User State
@@ -153,11 +185,11 @@
       const [loginForm, setLoginForm] = useState({ email: '', password: '' });
       const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '', phone: '', address: '', birthday: '', photo: '' });
       
-      const [productForm, setProductForm] = useState({ id: '', name: '', price: '', desc: '', image: '' });
+      const [productForm, setProductForm] = useState({ id: '', name: '', price: '', desc: '', image: '', origin: '', spec: '', usage: '' });
       const [editingProduct, setEditingProduct] = useState(false);
       const [tempRules, setTempRules] = useState([]); 
       const [newMember, setNewMember] = useState({ name: '', email: '', phone: '', address: '', birthday: '', points: 0, level: '一般會員', photo: '' });
-      const [editMemberForm, setEditMemberForm] = useState({ name: '', email: '', phone: '', address: '', birthday: '', points: 0, level: '' }); 
+      const [editMemberForm, setEditMemberForm] = useState({ id: '', name: '', email: '', phone: '', address: '', birthday: '', points: 0, level: '' }); 
       
       const [newsForm, setNewsForm] = useState({ title: '', content: '' });
       const [paymentForm, setPaymentForm] = useState({ orderId: '', last5: '', date: '' });
@@ -182,6 +214,7 @@
       useEffect(() => {
         if (!auth || !isConfigured) return; 
 
+        // 初始化時強制登出
         signOut(auth).catch((e) => console.error(e));
 
         return onAuthStateChanged(auth, (u) => {
@@ -504,9 +537,18 @@
 
       const handleSaveProduct = async () => {
         const id = editingProduct ? productForm.id : `p${Date.now()}`;
-        await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', id), { ...productForm, id, price: Number(productForm.price) });
+        const productData = { 
+            ...productForm, 
+            id, 
+            price: Number(productForm.price),
+            origin: productForm.origin || '', 
+            spec: productForm.spec || '',
+            usage: productForm.usage || ''
+        };
+        await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', id), productData);
         setShowProductModal(false); showToast('商品儲存');
       };
+
       const handleDeleteProduct = async (id) => { await deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'products', id)); showToast('商品刪除'); };
       const handlePublishNews = async () => { const id = `news_${Date.now()}`; await setDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'news', id), { ...newsForm, id, date: new Date().toISOString() }); setNewsForm({title:'',content:''}); showToast('公告發布'); };
       const handleDeleteNews = async (id) => { await deleteDoc(doc(db, 'artifacts', currentAppId, 'public', 'data', 'news', id)); showToast('公告刪除'); };
@@ -702,7 +744,7 @@
                   </div>
                 </div>
 
-                {/* Statistics Section (New) */}
+                {/* Statistics Section */}
                 <div className="bg-[#1a0b0b]/60 backdrop-blur-md p-6 rounded-3xl border border-red-900/30 mt-6">
                    <h4 className="font-bold text-lg text-white mb-4 flex items-center gap-2"><BarChart3 className="text-amber-400"/> 消費分析報告</h4>
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -836,7 +878,7 @@
                   <div className="bg-[#1a0b0b] rounded-2xl border border-red-900/30 overflow-hidden">
                     <div className="p-4 border-b border-red-900/30 flex justify-between items-center bg-red-950/20">
                       <span className="font-bold text-slate-200">商品清單</span>
-                      <button onClick={() => { setProductForm({ id: '', name: '', price: '', desc: '', image: '' }); setEditingProduct(false); setShowProductModal(true); }} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1"><Plus size={16} /> 上架</button>
+                      <button onClick={() => { setProductForm({ id: '', name: '', price: '', desc: '', image: '', origin: '', spec: '', usage: '' }); setEditingProduct(false); setShowProductModal(true); }} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1"><Plus size={16} /> 上架</button>
                     </div>
                     <div className="grid md:grid-cols-2 gap-4 p-4">
                       {products.map(p => (
