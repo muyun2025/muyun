@@ -71,21 +71,16 @@
       MessageCircle, Send, MessageSquare, ExternalLink, Lock, Minus, ArrowRight, Flame, HelpCircle, FileJson, FileSpreadsheet, KeyRound, BarChart3, Receipt
     } from 'lucide-react';
 
-    // --- ⚠️ 請在此填入 Firebase 設定 ⚠️ ---
+    // --- ⚠️ 設定區域 ⚠️ ---
+    // 已更新為您的 Firebase 設定
     let firebaseConfig = {
       apiKey: "AIzaSyA1oYaOhVjIjR1TOmsJ_9LTIGvbuRxD_OI",
-
-  authDomain: "muyun-system.firebaseapp.com",
-
-  projectId: "muyun-system",
-
-  storageBucket: "muyun-system.firebasestorage.app",
-
-  messagingSenderId: "624450482056",
-
-  appId: "1:624450482056:web:3930e7d7c8392fb68c143d",
-
-  measurementId: "G-RNYN5YG02W"
+      authDomain: "muyun-system.firebaseapp.com",
+      projectId: "muyun-system",
+      storageBucket: "muyun-system.firebasestorage.app",
+      messagingSenderId: "624450482056",
+      appId: "1:624450482056:web:3930e7d7c8392fb68c143d",
+      measurementId: "G-RNYN5YG02W"
     };
 
     const LINE_ID = "muyun_official"; 
@@ -94,7 +89,9 @@
 
     if (typeof __firebase_config !== 'undefined') {
       try {
-        firebaseConfig = JSON.parse(__firebase_config);
+        // 如果是在預覽環境，可能會覆蓋掉，但在本地開啟 index.html 時會使用上面的設定
+        // 為了避免衝突，我們可以優先使用手動填寫的設定
+        // firebaseConfig = JSON.parse(__firebase_config); 
         if (typeof __app_id !== 'undefined') currentAppId = __app_id;
         if (typeof __initial_auth_token !== 'undefined') initialAuthToken = __initial_auth_token;
       } catch (e) { console.warn("使用手動設定模式"); }
@@ -304,14 +301,22 @@
         }
       };
 
+      // Forgot Password Logic (Improved)
       const handleForgotPassword = async () => {
         if (!resetEmail) { showToast('請輸入 Email', 'error'); return; }
         try {
           await sendPasswordResetEmail(auth, resetEmail);
-          showToast('重設密碼信已寄出，請檢查信箱');
+          showToast('重設密碼信已寄出，請檢查信箱 (含垃圾信件匣)');
           setShowForgotPasswordModal(false);
         } catch (e) {
-          showToast('發送失敗：' + e.message, 'error');
+          console.error("Password Reset Error:", e);
+          if (e.code === 'auth/user-not-found') {
+             showToast('此 Email 尚未註冊會員', 'error');
+          } else if (e.code === 'auth/invalid-email') {
+             showToast('Email 格式不正確', 'error');
+          } else {
+             showToast('發送失敗：' + e.message, 'error');
+          }
         }
       };
 
